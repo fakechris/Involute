@@ -6,8 +6,28 @@ import { App } from './App';
 import { AppApolloProvider } from './lib/apollo';
 import { readSignInReturn } from './lib/session';
 
-function renderApp(session: 'signed-out' | 'signed-in', graphql: () => Response | Promise<Response>) {
-  vi.stubGlobal('fetch', vi.fn((req: string) => Promise.resolve(req.endsWith('/auth/session')
+vi.mock('./routes/IssuePage', async () => {
+  const { useState } = await import('react');
+  const { DialogShell } = await import('./components/DialogShell');
+  return {
+    IssuePage() {
+      const [open, setOpen] = useState(false);
+      return (
+        <main>
+          <button onClick={() => setOpen(true)}>Edit issue</button>
+          {open ? (
+            <DialogShell title="Edit issue" variant="modal" onClose={() => setOpen(false)} onSubmit={(event) => event.preventDefault()}>
+              <textarea aria-label="Description" />
+            </DialogShell>
+          ) : null}
+        </main>
+      );
+    },
+  };
+});
+
+function renderApp(session: 'signed-out' | 'signed-in', graphql: (operation: string) => Response | Promise<Response>) {
+  vi.stubGlobal('fetch', vi.fn((req: string, init?: RequestInit) => Promise.resolve(req.endsWith('/auth/session')
     ? Response.json({
       authMode: session === 'signed-in' ? 'session' : 'none',
       authenticated: session === 'signed-in',
@@ -15,7 +35,7 @@ function renderApp(session: 'signed-out' | 'signed-in', graphql: () => Response 
       authProviders: [{ id: 'google', startUrl: '/auth/google/start', label: 'Sign in with Google' }],
       googleOAuthConfigured: true,
     }, { status: session === 'signed-in' ? 200 : 401 })
-    : graphql())));
+    : graphql(JSON.parse(String(init?.body ?? '{}')).operationName ?? ''))));
 
   return render(<AppApolloProvider><BrowserRouter><App /></BrowserRouter></AppApolloProvider>);
 }
@@ -27,6 +47,7 @@ const unavailable = () => Response.json({ error: 'Unavailable' }, { status: 500 
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.history.replaceState(null, '', '/');
   window.localStorage.clear();
@@ -51,6 +72,7 @@ describe('expired session query failures', () => {
 
     expect(await screen.findByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
     const main = within(screen.getByRole('main'));
+    expect(screen.queryByText(/Your session ended/i)).not.toBeInTheDocument();
     expect(main.getByRole('link', { name: 'Sign in with Google' })).toHaveAttribute('href', expect.stringContaining('/auth/google/start'));
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Not authenticated|Delivery changes could not be loaded/i)).not.toBeInTheDocument();
@@ -67,9 +89,36 @@ describe('expired session query failures', () => {
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeVisible();
     finishRequest();
 
-    expect(await screen.findByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
+    expect(await screen.findByText('Your session ended. Copy any unsaved text before you sign in.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'Sign in with Google' })).toHaveLength(2);
+    expect(within(screen.getByText(/Your session ended/).parentElement!).getByRole('link', { name: 'Sign in' })).toBeVisible();
+  });
+
+  it('keeps an open form and its draft when the Activity poll finds an expired session', async () => {
+    window.history.replaceState(null, '', '/issue/INV-1');
+    const setTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, delay, ...args) =>
+      setTimeout(callback, delay === 60_000 ? 50 : delay, ...args),
+    );
+    let expired = false;
+    const unreadCount = vi.fn(() => expired ? codedAuthError() : Response.json({ data: { unreadNotificationCount: 0 } }));
+    renderApp('signed-in', (operation) =>
+      operation === 'UnreadNotificationCount' ? unreadCount() : Response.json({ data: null }),
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit issue' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit issue' });
+    const draft = within(dialog).getByRole('textbox', { name: 'Description' });
+    fireEvent.change(draft, { target: { value: 'Unsaved description' } });
+    await waitFor(() => expect(unreadCount).toHaveBeenCalled());
+    expect(screen.queryByText(/Your session ended/i)).not.toBeInTheDocument();
+    expired = true;
+
+    const prompt = await screen.findByText('Your session ended. Copy any unsaved text before you sign in.');
+    expect(within(prompt.parentElement!).getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', expect.stringContaining('/auth/google/start'));
+    expect(screen.getByRole('dialog', { name: 'Edit issue' })).toBe(dialog);
+    expect(draft).toHaveValue('Unsaved description');
+    expect(draft).toHaveFocus();
   });
 
   it('leaves a 500 as a retryable error', async () => {

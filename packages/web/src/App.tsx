@@ -301,6 +301,7 @@ export function App() {
   const [signInReturn, setSignInReturn] = useState(() => atSignInLanding ? readSignInReturn() : null);
   const [loadedSession, setSession] = useState<SessionState | null | undefined>(undefined);
   const authenticationFailed = useAuthenticationFailure();
+  const sessionExpired = authenticationFailed && loadedSession?.authenticated;
   const session = authenticationFailed && loadedSession
     ? { ...loadedSession, authMode: 'none' as const, authenticated: false, viewer: null }
     : loadedSession;
@@ -1427,7 +1428,7 @@ export function App() {
         </header>
 
         <div className="app-shell__content" data-route={location.pathname}>
-          {authenticationFailed ? <SignInPage session={session} authError={authError} /> : restoringPage ? (
+          {authenticationFailed && !sessionExpired ? <SignInPage session={session} authError={authError} /> : restoringPage ? (
             <main><PageBody><LoadingState>Restoring your page…</LoadingState></PageBody></main>
           ) : (
           <RouteErrorBoundary resetKey={location.pathname}>
@@ -1480,6 +1481,25 @@ export function App() {
           )}
         </div>
       </div>
+
+      {sessionExpired ? (
+        <div className="page-notice page-notice--floating" role="alert">
+          {session?.authProviders[0] || session?.googleOAuthConfigured ? (
+            <>
+              <p className="page-notice__text">Your session ended. Copy any unsaved text before you sign in.</p>
+              <a
+                className="ui-action ui-action--accent ui-action--sm"
+                href={session.authProviders[0] ? getProviderLoginUrl(session.authProviders[0].startUrl) : getGoogleLoginUrl()}
+                onClick={rememberSignInReturn}
+              >
+                Sign in
+              </a>
+            </>
+          ) : (
+            <p className="page-notice__text">Your session ended. Contact your workspace admin to sign in.</p>
+          )}
+        </div>
+      ) : null}
 
       {/* The sidebar's team list comes from the server, not only from the last board visit (INV-853). */}
       {session?.authenticated ? <ShellTeamsSync /> : null}
