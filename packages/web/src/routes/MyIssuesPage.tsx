@@ -28,10 +28,9 @@ function formatTimeAgo(date: string): string {
   return `${Math.floor(days / 30)}mo`;
 }
 
-function classifyState(stateType: WorkflowStateType): 'progress' | 'review' | 'todo' | 'backlog' | 'completed' {
+function classifyState(stateType: WorkflowStateType): 'progress' | 'todo' | 'backlog' | 'completed' {
   switch (stateType) {
     case 'STARTED': return 'progress';
-    case 'REVIEW': return 'review';
     case 'COMPLETED':
     case 'CANCELED': return 'completed';
     case 'BACKLOG': return 'backlog';
@@ -91,7 +90,6 @@ export function MyIssuesPage() {
 
   const groups = useMemo<IssueGroup[]>(() => {
     const progress: IssueSummary[] = [];
-    const review: IssueSummary[] = [];
     const todo: IssueSummary[] = [];
     const backlog: IssueSummary[] = [];
     const completed: IssueSummary[] = [];
@@ -99,7 +97,6 @@ export function MyIssuesPage() {
     for (const issue of myIssues) {
       const group = classifyState(issue.state.type);
       if (group === 'progress') progress.push(issue);
-      else if (group === 'review') review.push(issue);
       else if (group === 'completed') completed.push(issue);
       else if (group === 'backlog') backlog.push(issue);
       else todo.push(issue);
@@ -107,7 +104,6 @@ export function MyIssuesPage() {
 
     return [
       { label: 'In progress', items: progress },
-      { label: 'In Review', items: review },
       { label: 'Todo', items: todo },
       { label: 'Backlog', items: backlog },
       { label: 'Completed', items: completed },
@@ -155,7 +151,6 @@ export function MyIssuesPage() {
               <option value="BACKLOG">Backlog</option>
               <option value="UNSTARTED">Unstarted</option>
               <option value="STARTED">Started</option>
-              <option value="REVIEW">In Review</option>
               <option value="COMPLETED">Completed</option>
               <option value="CANCELED">Canceled</option>
             </Select>

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useQuery } from '@apollo/client/react';
@@ -11,7 +11,7 @@ vi.mock('../components/RouteIssueDrawer', () => import('../test/route-issue-draw
 vi.mock('@apollo/client/react', () => ({ useQuery: vi.fn() }));
 
 const me = { id: 'u1', name: 'Me', email: 'me@test' };
-function issue(id: string, title: string, repository: string | null, priority: number, type: string, name = type) {
+function issue(id: string, title: string, repository: string | null, priority: number, type: string) {
   return {
     id,
     identifier: id,
@@ -21,7 +21,7 @@ function issue(id: string, title: string, repository: string | null, priority: n
     revision: 1,
     createdAt: '2026-10-01T00:00:00.000Z',
     updatedAt: '2026-10-01T00:00:00.000Z',
-    state: { id: `s-${type}`, name, type, position: 1 },
+    state: { id: `s-${type}`, name: type, type, position: 1 },
     team: { id: 't', key: 'INV' },
     labels: { nodes: [] },
     assignee: me,
@@ -69,28 +69,6 @@ describe('MyIssuesPage (INV-1314)', () => {
     );
     expect(screen.getByRole('heading', { name: 'No issues assigned to you' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Clear all filters' })).not.toBeInTheDocument();
-  });
-
-  it('groups review work separately from Todo and filters by In Review (INV-2120)', () => {
-    vi.mocked(useQuery).mockReturnValue({
-      data: { issues: { nodes: [
-        issue('INV-1', 'Fix login', 'acme/web', 1, 'UNSTARTED', 'Ready'),
-        issue('INV-2', 'Tune queries', 'acme/api', 1, 'REVIEW', 'In Review'),
-      ] } },
-      loading: false,
-    } as never);
-    render(<MemoryRouter><MyIssuesPage /></MemoryRouter>);
-    const review = screen.getByRole('list', { name: 'In Review' });
-    const todo = screen.getByRole('list', { name: 'Todo' });
-    expect(within(review).getByRole('link', { name: 'Open issue INV-2' })).toBeInTheDocument();
-    expect(within(review).getByText('In Review')).toBeInTheDocument();
-    expect(within(todo).getByRole('link', { name: 'Open issue INV-1' })).toBeInTheDocument();
-    expect(within(todo).getByText('Ready')).toBeInTheDocument();
-    expect(within(todo).queryByRole('link', { name: 'Open issue INV-2' })).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by state' }), { target: { value: 'REVIEW' } });
-    expect(screen.queryByRole('list', { name: 'Todo' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open issue INV-2' })).toBeInTheDocument();
   });
 
   it('shows a no-match state and clears text, project, priority and workflow filters together (INV-2121)', () => {
