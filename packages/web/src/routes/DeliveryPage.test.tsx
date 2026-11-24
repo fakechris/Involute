@@ -148,6 +148,16 @@ it('keeps the saved team if it is accessible', async () => {
   expect(requests[0]).toMatchObject({ teamKey: 'OPS' });
   expect(screen.getByRole('combobox', { name: 'Delivery team' })).toHaveValue('OPS');
 });
+it('clears the previous team’s project and keeps the window and sample when switching teams', async () => {
+  const requests = mount(async () => fixture(), 'OPEN', defaultProjects, `from=${start}&to=${end}&project=acme/a`, [], [], twoTeams);
+  await screen.findByLabelText('Completed sample latency');
+  expect(requests[0]).toMatchObject({ teamKey: 'INV', repository: 'acme/a' });
+
+  fireEvent.change(screen.getByRole('combobox', { name: 'Delivery team' }), { target: { value: 'OPS' } });
+
+  await waitFor(() => expect(requests[1]).toMatchObject({ teamKey: 'OPS', repository: null, from: start, to: end, sample: 'OPEN' }));
+  expect(screen.queryByRole('button', { name: 'Project: acme/a' })).not.toBeInTheDocument();
+});
 it('offers team selection rather than querying an inaccessible saved team', async () => {
   vi.mocked(readStoredTeamKey).mockReturnValue('OLD');
   const requests = mount(async () => fixture(), '', defaultProjects, '', [], [], twoTeams);

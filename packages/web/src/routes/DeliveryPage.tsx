@@ -300,6 +300,7 @@ export function DeliveryPage() {
   function changeTeam(key: string) {
     const updated = new URLSearchParams(params);
     updated.set('team', key);
+    updated.delete('project');
     writeStoredTeamKey(key);
     setParams(updated);
   }
