@@ -62,7 +62,7 @@ function formatNotificationType(type: string): string {
     case 'work.uncommitted':
       return 'Moved back to candidates';
     case 'work.review_rejected':
-      return 'Returned with feedback';
+      return 'Returned to Ready';
     case 'work.claim_expired':
       return 'Agent lease expired';
     case 'run.stale':
@@ -123,6 +123,9 @@ function formatNotificationType(type: string): string {
   }
 }
 
+// A review decision in words, not its enum value.
+const DECISION_WORDS: Record<string, string> = { ACCEPTED: 'Accepted', REJECTED: 'Returned, no reason given' };
+
 function getPayloadSummary(payload: Record<string, unknown> | null): string | null {
   if (!payload) return null;
   if (Array.isArray(payload.items)) {
@@ -132,7 +135,7 @@ function getPayloadSummary(payload: Record<string, unknown> | null): string | nu
   if (typeof payload.summary === 'string' && payload.summary) return payload.summary;
   if (typeof payload.message === 'string' && payload.message) return payload.message;
   if (typeof payload.reason === 'string' && payload.reason) return payload.reason;
-  if (typeof payload.decision === 'string' && payload.decision) return `Decision: ${payload.decision}`;
+  if (typeof payload.decision === 'string' && payload.decision) return DECISION_WORDS[payload.decision] ?? `Decision: ${payload.decision.toLowerCase()}`;
   return null;
 }
 

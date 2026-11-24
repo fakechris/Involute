@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useQuery } from '@apollo/client/react';
@@ -58,6 +58,38 @@ describe('MyIssuesPage (INV-1314)', () => {
     expect(screen.queryByRole('link', { name: 'Open issue INV-2' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Open issue INV-3' })).toBeNull();
     expect(screen.getByLabelText('Filter by state')).toHaveValue('');
+  });
+
+  it('puts In Review in its own group, keeps Canceled apart from Done, and filters by In Review (INV-2120)', () => {
+    vi.mocked(useQuery).mockReturnValue({
+      data: {
+        issues: {
+          nodes: [
+            issue('INV-1', 'Ready one', null, 3, 'UNSTARTED'),
+            issue('INV-2', 'Waiting review', null, 3, 'REVIEW'),
+            issue('INV-3', 'Shipped', null, 3, 'COMPLETED'),
+            issue('INV-4', 'Dropped', null, 3, 'CANCELED'),
+          ],
+        },
+      },
+      loading: false,
+    } as never);
+    render(
+      <MemoryRouter>
+        <MyIssuesPage />
+      </MemoryRouter>,
+    );
+    const inGroup = (label: string) => screen.getByRole('list', { name: label });
+    expect(within(inGroup('In Review')).getByRole('link', { name: 'Open issue INV-2' })).toBeInTheDocument();
+    expect(within(inGroup('Ready')).getByRole('link', { name: 'Open issue INV-1' })).toBeInTheDocument();
+    expect(within(inGroup('Ready')).queryByRole('link', { name: 'Open issue INV-2' })).toBeNull();
+    expect(within(inGroup('Done')).queryByRole('link', { name: 'Open issue INV-4' })).toBeNull();
+    expect(within(inGroup('Canceled')).getByRole('link', { name: 'Open issue INV-4' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Todo' })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Filter by state'), { target: { value: 'REVIEW' } });
+    expect(screen.getByRole('link', { name: 'Open issue INV-2' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open issue INV-1' })).toBeNull();
   });
 
   it('says when nothing is assigned', () => {

@@ -65,7 +65,7 @@ import { IcoChevL, IcoChevR, IcoCopy, IcoMore, IcoLink, IcoClose } from '../comp
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { BugCaptureSection } from '../components/BugCaptureSection';
 import { WorkFiles } from '../components/WorkFiles';
-import { Avatar, Btn, Kbd } from '../components/Primitives';
+import { Avatar, Btn } from '../components/Primitives';
 import { RichTextEditor } from '../components/RichTextEditor';
 import { Select } from '../components/controls';
 import { PageBody, PageHeader } from '../components/layout';
@@ -655,8 +655,8 @@ export function IssuePage() {
             <Btn variant="subtle" onClick={() => navigate(`/work/${activeIssue.id}`)}>
               Work context
             </Btn>
-            <Btn variant="ghost" icon={<IcoChevL />} title="Previous issue" onClick={() => navigate(-1)} />
-            <Btn variant="ghost" icon={<IcoChevR />} title="Next issue" onClick={() => navigate(1)} />
+            <Btn variant="ghost" icon={<IcoChevL />} title="Back" aria-label="Back" onClick={() => navigate(-1)} />
+            <Btn variant="ghost" icon={<IcoChevR />} title="Forward" aria-label="Forward" onClick={() => navigate(1)} />
             <div className="issue-panel__menu">
               <Btn variant="ghost" icon={<IcoMore />} title="More" onClick={() => setMoreMenuOpen(!moreMenuOpen)} />
               {moreMenuOpen && (
@@ -698,7 +698,7 @@ export function IssuePage() {
                 <span>{activeIssue.autoAccept.reasons[0] ?? 'Accepted automatically after GitHub verified the fix.'}</span>
                 {reviewStateId ? (
                   <Btn variant="subtle" size="sm" disabled={isSavingState} onClick={() => void persistStateChange(activeIssue, reviewStateId).catch(() => undefined)}>
-                    Return to Review
+                    Move back to In Review
                   </Btn>
                 ) : null}
               </div>
@@ -1256,8 +1256,7 @@ export function IssuePage() {
             onClick={handleCopyLink}
           >
             <span className="issue-panel__action-icon"><IcoCopy size={13} /></span>
-            <span>Copy issue URL</span>
-            <span className="issue-panel__action-kbd"><Kbd keys={['⌘', 'L']} /></span>
+            <span>Copy link</span>
           </button>
 
           <button

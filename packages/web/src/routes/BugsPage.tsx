@@ -376,7 +376,8 @@ function BugTriageMetrics({ metrics }: { metrics: BugMetricsData }) {
         />
         <StatTile
           value={metrics.slaMetRate === null ? '—' : `${Math.round(metrics.slaMetRate * 100)}%`}
-          label={`Fixed within SLA (${metrics.slaMetCount} of ${slaClosed})`}
+          label={`Closed within SLA (${metrics.slaMetCount} of ${slaClosed} closed)`}
+          title="Bugs moved to Done or Canceled before their SLA deadline."
         />
         <StatTile
           tone={metrics.breachedOpen.length ? 'alert' : 'default'}

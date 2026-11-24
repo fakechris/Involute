@@ -855,18 +855,19 @@ function HandledForYou({ items, reviewStateFor, onChanged }: { items: HandledIte
               item.gate === 'contract_amendment' ? (
                 reasonFor?.id === item.id ? (
                   <span className="inline-form">
-                    <input aria-label={`Reason for returning ${item.work.identifier}`} value={reasonFor.text} placeholder="Why" onChange={(event) => setReasonFor({ id: item.id, text: event.target.value })} />
-                    <Btn size="sm" variant="accent" disabled={!reasonFor.text.trim()} onClick={() => void returnToMe(item, reasonFor.text.trim())}>Confirm return</Btn>
+                    <input aria-label={`Reason for undoing the change on ${item.work.identifier}`} value={reasonFor.text} placeholder="Why" onChange={(event) => setReasonFor({ id: item.id, text: event.target.value })} />
+                    <Btn size="sm" variant="accent" disabled={!reasonFor.text.trim()} onClick={() => void returnToMe(item, reasonFor.text.trim())}>Undo change</Btn>
+                    <span className="list-row__note">The contract goes back to its earlier text.</span>
                   </span>
                 ) : (
-                  <Btn size="sm" variant="ghost" onClick={() => setReasonFor({ id: item.id, text: '' })}>Return to me</Btn>
+                  <Btn size="sm" variant="ghost" onClick={() => setReasonFor({ id: item.id, text: '' })}>Undo and decide again</Btn>
                 )
               ) : item.gate === 'review_accept' ? (
-                <Btn size="sm" variant="ghost" onClick={() => void returnToReview(item)}>Return to Review</Btn>
+                <Btn size="sm" variant="ghost" onClick={() => void returnToReview(item)}>Move back to In Review</Btn>
               ) : (
                 <Btn size="sm" variant="ghost" onClick={() => void returnToCandidates(item)}>Return to candidates</Btn>
               )
-            ) : <Badge>In progress</Badge>}
+            ) : <Badge>Cannot undo: work started</Badge>}
             {notice?.id === item.id ? <span role={notice.ok ? 'status' : 'alert'} className="list-row__note">{notice.text}</span> : null}
           </li>
         ))}

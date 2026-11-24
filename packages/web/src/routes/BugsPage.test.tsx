@@ -187,7 +187,7 @@ describe('BugsPage', () => {
     const triage = screen.getByLabelText('Triage and SLA');
     expect(triage).toHaveTextContent('2Waiting in triage');
     expect(triage).toHaveTextContent('3.5h / 3dTriage time p50 / p90 (4 triaged)');
-    expect(triage).toHaveTextContent('75%Fixed within SLA (3 of 4)');
+    expect(triage).toHaveTextContent('75%Closed within SLA (3 of 4 closed)');
     expect(triage).toHaveTextContent('1 / 1Open past SLA / at risk');
     expect(triage).toHaveTextContent('1Open bugs with no parent (goal 0)');
     expect(within(triage).getByRole('link', { name: /Waiting in triage/ })).toHaveAttribute('href', '/candidates?type=bug');

@@ -35,7 +35,7 @@ describe('auto-accepted bug (INV-1075)', () => {
     renderApp(App, { data, loading: false }, ['/issue/issue-1']);
     const note = await screen.findByRole('note', { name: 'Auto-accepted' });
     expect(note).toHaveTextContent('PR #12 merged');
-    fireEvent.click(screen.getByRole('button', { name: 'Return to Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move back to In Review' }));
     await waitFor(() => expect(update).toHaveBeenCalledWith({ variables: { id: 'issue-1', input: { stateId: 'state-review', expectedRevision: 1 } } }));
   });
 });

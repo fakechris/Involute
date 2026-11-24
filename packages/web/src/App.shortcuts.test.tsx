@@ -192,4 +192,25 @@ describe('App keyboard shortcuts and help dialog', () => {
     expect(await screen.findByRole('dialog', { name: /Create issue/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Candidates' })).not.toBeInTheDocument();
   });
+
+  it('ignores single-key shortcuts while Settings → Keyboard shortcuts is off (INV-2126)', async () => {
+    window.localStorage.setItem('involute.shortcuts', 'false');
+    try {
+      renderTestApp();
+      expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+      fireEvent.keyDown(window, { key: 'c' });
+      fireEvent.keyDown(window, { key: 'g' });
+      fireEvent.keyDown(window, { key: 'c' });
+      expect(screen.queryByRole('dialog', { name: /Create issue/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Candidates' })).not.toBeInTheDocument();
+
+      // Turned back on, the same key works again without a reload.
+      window.localStorage.setItem('involute.shortcuts', 'true');
+      fireEvent.keyDown(window, { key: 'c' });
+      expect(await screen.findByRole('dialog', { name: /Create issue/i })).toBeInTheDocument();
+    } finally {
+      window.localStorage.removeItem('involute.shortcuts');
+    }
+  });
 });
+

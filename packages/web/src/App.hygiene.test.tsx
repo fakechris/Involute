@@ -47,6 +47,9 @@ describe('work graph health page (INV-721)', () => {
     expect(within(screen.getByRole('region', { name: 'Research with nothing derived' })).getByText('INV-694')).toBeInTheDocument();
     expect(summary).toHaveTextContent('1Research ready to close');
     expect(within(screen.getByRole('region', { name: 'Research ready to close' })).getByText('INV-940')).toBeInTheDocument();
+    // The hint points at a control that exists (INV-2133).
+    expect(screen.getByRole('region', { name: 'Research ready to close' })).toHaveTextContent('You can also open the item and move it to Done.');
+    expect(screen.getByRole('region', { name: 'Research ready to close' })).not.toHaveTextContent('accept it here');
     expect(summary).toHaveTextContent('1Overdue incident follow-ups');
     expect(within(screen.getByRole('region', { name: 'Overdue incident follow-ups' })).getByText('INV-1132')).toBeInTheDocument();
   });
@@ -55,9 +58,9 @@ describe('work graph health page (INV-721)', () => {
     renderApp(App, { data: boardQueryResult, loading: false, hygieneData }, ['/hygiene']);
     const summary = await screen.findByLabelText('Summary');
     expect(summary).toHaveTextContent('1Incidents without follow-ups');
-    expect(summary).toHaveTextContent('1Incidents without a postmortem');
+    expect(summary).toHaveTextContent('1SEV1/SEV2 incidents with no file attached');
     expect(within(screen.getByRole('region', { name: 'Incidents without follow-ups' })).getByText('INV-1130')).toBeInTheDocument();
-    const postmortem = screen.getByRole('region', { name: 'Incidents without a postmortem' });
+    const postmortem = screen.getByRole('region', { name: 'SEV1/SEV2 incidents with no file attached' });
     expect(within(postmortem).getByText('INV-1131')).toBeInTheDocument();
     expect(within(postmortem).getByText('SEV1')).toBeInTheDocument();
   });
