@@ -9,10 +9,14 @@
  *   (c) a hex / rgb() colour literal in TSX (colours come from tokens);
  *   (d) a new inline `style={{` in TSX (layout and colour live in stylesheets);
  *   (e) a work-identifier pattern outside work/work-reference.ts (references in
- *       text render through WorkReference / WorkReferenceText, INV-1536).
+ *       text render through WorkReference / WorkReferenceText, INV-1536);
+ *   (f) internal words in text a person reads: tool and API names, enum
+ *       values, ticket numbers and repository paths (docs/design-system.md
+ *       "界面用词", INV-2134).
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const SRC = join(__dirname, '..');
@@ -218,6 +222,75 @@ function looksLikeIdentifierPattern(source: string): boolean {
   return source.split('\n').some((line) => /\[A-Z/.test(line) && /-\\d/.test(line));
 }
 
+// (f) Words a person never needs to read (INV-2134). Each entry: why it is banned.
+const BANNED_WORDS: Array<[name: string, pattern: RegExp]> = [
+  ['needinfo', /\bneed-?info\b/i], // say "question" / "ask for information"
+  ['kernel', /\bkernel\b/i], // internal architecture word
+  ['workReview', /\bworkReview\b/], // GraphQL mutation name
+  ['run_report', /\brun_report\b/], // MCP tool name
+  ['IQL', /\bIQL\b/], // say "filter query"
+  ['UPPER_SNAKE', /\b[A-Z]{2,}(?:_[A-Z]+)+\b/], // enum value or env var (DERIVED_FROM, INVOLUTE_SECRET_KEY)
+  ['BLOCKS', /\bBLOCKS\b/], // link-type enum: say "blocks" / "blocked by"
+  ['(INV-n)', /\(INV-\d+\)/], // ticket numbers belong in code comments
+  ['docs path', /\bdocs\/[\w./-]+\.md\b/], // a repository path a person cannot open
+];
+
+// Existing text that still breaks the rules; INV-2135 rewrites it and empties this list.
+const WORDING_ALLOWLIST = new Set<string>([
+  'components/NeedInfoControl.tsx: needinfo',
+  'components/graph/DependencyGraph.tsx: BLOCKS',
+  'routes/AutonomyTab.tsx: docs path',
+  'routes/CandidatesPage.tsx: BLOCKS',
+  'routes/FieldsTab.tsx: IQL',
+  'routes/GitHubSettingsTab.tsx: UPPER_SNAKE',
+  'routes/GitHubSettingsTab.tsx: docs path',
+  'routes/HygienePage.tsx: BLOCKS',
+  'routes/HygienePage.tsx: UPPER_SNAKE',
+  'routes/HygienePage.tsx: run_report',
+  'routes/InReviewPage.tsx: IQL',
+  'routes/InReviewPage.tsx: workReview',
+  'routes/SearchPage.tsx: IQL',
+  'routes/WorkContextPage.tsx: (INV-n)',
+  'routes/WorkContextPage.tsx: kernel',
+  'routes/WorkContextPage.tsx: run_report',
+]);
+
+const TEXT_ATTRIBUTES = new Set(['title', 'aria-label', 'aria-description', 'placeholder', 'hint', 'label', 'body', 'alt']);
+
+/** The text of a JSX file a person reads: JSX text, string children and text attributes. */
+function visibleTexts(fileName: string, source: string): string[] {
+  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const texts: string[] = [];
+  const literal = (node: ts.Node | undefined): string | null => {
+    if (!node) return null;
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+    if (ts.isTemplateExpression(node)) return [node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join(' ');
+    return null;
+  };
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxText(node)) texts.push(node.text);
+    else if (ts.isJsxExpression(node) && (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent))) {
+      const text = literal(node.expression);
+      if (text) texts.push(text);
+    } else if (ts.isJsxAttribute(node) && TEXT_ATTRIBUTES.has(node.name.getText(file))) {
+      const init = node.initializer;
+      const text = init && ts.isStringLiteral(init) ? init.text : init && ts.isJsxExpression(init) ? literal(init.expression) : null;
+      if (text) texts.push(text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return texts;
+}
+
+function wordingOffenders(fileName: string, source: string): string[] {
+  const found = new Set<string>();
+  for (const text of visibleTexts(fileName, source)) {
+    for (const [name, pattern] of BANNED_WORDS) if (pattern.test(text)) found.add(name);
+  }
+  return [...found];
+}
+
 describe('design guard', () => {
   it('every class used in TSX is defined in a stylesheet', () => {
     const defined = definedClasses();
@@ -299,5 +372,27 @@ describe('design guard', () => {
     expect(classTokens(`tab === 'a' ? 'is-active x' : 'y'`)).toEqual(['is-active', 'x', 'y']);
     expect(classTokens('`card${on ? \' card--on\' : \'\'} plain dyn--${kind}`').sort()).toEqual(['card', 'card--on', 'plain']);
     expect(classTokens("`badge badge--${a ? 'x' : 'y'}`")).toEqual(['badge']);
+  });
+
+  it('text a person reads has no tool names, enum values, ticket numbers or repo paths (INV-2134)', () => {
+    const found = tsxFiles.flatMap((file) => {
+      const name = relative(SRC, file);
+      return wordingOffenders(name, readFileSync(file, 'utf8')).map((word) => `${name}: ${word}`);
+    });
+    const fresh = found.filter((entry) => !WORDING_ALLOWLIST.has(entry)).sort();
+    expect(fresh, 'use the words in docs/design-system.md "界面用词"').toEqual([]);
+    // A fixed entry leaves the allowlist, so the list only shrinks.
+    const stale = [...WORDING_ALLOWLIST].filter((entry) => !found.includes(entry)).sort();
+    expect(stale, 'remove these from WORDING_ALLOWLIST').toEqual([]);
+  });
+
+  it('the wording guard reads JSX text and text attributes, not code', () => {
+    expect(wordingOffenders('a.tsx', 'const x = <p>Withdraw needinfo</p>;')).toEqual(['needinfo']);
+    expect(wordingOffenders('a.tsx', 'const x = <Btn title="Calls workReview">Go</Btn>;')).toEqual(['workReview']);
+    expect(wordingOffenders('a.tsx', "const x = <p>{'See docs/postmortem.md'}</p>;")).toEqual(['docs path']);
+    expect(wordingOffenders('a.tsx', 'const x = <Field hint={`Linked DERIVED_FROM ${a}`} />;')).toEqual(['UPPER_SNAKE']);
+    // Generics, constants and comments are code, not text.
+    expect(wordingOffenders('a.tsx', 'const [run] = useMutation<A, B>(ISSUE_UPDATE_MUTATION); // needinfo (INV-1)\nconst y = <p>Save</p>;')).toEqual([]);
+    expect(wordingOffenders('a.tsx', 'const x = <p aria-label="Close" data-kind="DERIVED_FROM">Done</p>;')).toEqual([]);
   });
 });
