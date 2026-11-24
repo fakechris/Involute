@@ -2,6 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
+
+import { READ_ONLY_TEAM_MESSAGE } from '../lib/apollo';
 import { CandidatesPage } from './CandidatesPage';
 import { CommitUndoHost } from '../undo/CommitUndoHost';
 import { StatusUndoToast } from '../undo/StatusUndoToast';
@@ -805,5 +808,36 @@ describe('CandidatesPage', () => {
     await waitFor(() => expect(mockRunCommit).toHaveBeenCalledTimes(1));
     expect(mockRunCommit.mock.calls[0]![0].variables.input.attributes).toEqual({ customer: 'Acme' });
     queryDataHolder.current = null;
+  });
+});
+
+// INV-2159: a team Viewer reads a candidate card but cannot commit, decline or snooze it.
+describe('CandidatesPage for a team Viewer', () => {
+  const firstTeam = candidateItems[0]!.team as { id: string; key: string; viewerCanWrite?: boolean };
+  afterEach(() => {
+    delete firstTeam.viewerCanWrite;
+  });
+
+  it('makes the card read-only and says edit access is needed', () => {
+    firstTeam.viewerCanWrite = false;
+    render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+    const card = screen.getByRole('article', { name: 'INV-40 candidate' });
+    expect(within(card).getByRole('note')).toHaveTextContent(READ_ONLY_TEAM_MESSAGE);
+    expect(within(card).getByRole('button', { name: 'Commit' })).toBeDisabled();
+    expect(within(card).getByRole('button', { name: 'Decline' })).toBeDisabled();
+    expect(within(card).getByRole('button', { name: 'Snooze 7d' })).toBeDisabled();
+    expect(within(card).getByLabelText('Acceptance for INV-40')).toBeDisabled();
+    expect(within(card).queryByTitle('Select INV-40')).toBeNull();
+    const other = screen.getByRole('article', { name: 'INV-21 candidate' });
+    expect(within(other).queryByRole('note')).toBeNull();
+  });
+
+  it('says edit access is missing, not "check acceptance, owner and revision", when a commit is refused', async () => {
+    mockRunCommit.mockRejectedValueOnce(new CombinedGraphQLErrors({ errors: [{ message: 'You do not have edit access to this team.', extensions: { code: 'FORBIDDEN' } }] }));
+    render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+    const card = screen.getByRole('article', { name: 'INV-40 candidate' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Commit' }));
+    expect(await within(card).findByRole('alert')).toHaveTextContent(READ_ONLY_TEAM_MESSAGE);
+    expect(screen.queryByText(/Check acceptance, owner, and revision/)).toBeNull();
   });
 });

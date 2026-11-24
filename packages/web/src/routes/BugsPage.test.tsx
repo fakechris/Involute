@@ -3,6 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
+
+import { READ_ONLY_TEAM_MESSAGE } from '../lib/apollo';
 import { BugsPage } from './BugsPage';
 import { writeStoredTeamKey } from '../board/utils';
 import { expectRowOpensDrawer, renderWithDrawerHost } from '../test/drawer-host-harness';
@@ -479,5 +482,36 @@ describe('BugsPage', () => {
     await expectRowOpensDrawer(within(screen.getByRole('list', { name: 'Open bugs list' })).getByRole('link', { name: /^INV-30\b/ }), 'INV-30', url);
     await expectRowOpensDrawer(within(screen.getByLabelText('Open bugs past their SLA')).getByRole('link', { name: /INV-30/ }), 'INV-30', url);
     await expectRowOpensDrawer(within(screen.getByLabelText('Most duplicated open bugs')).getByRole('link', { name: /INV-32/ }), 'INV-32', url);
+  });
+});
+
+// INV-2161: a team Viewer sees open bugs but cannot change them in place.
+describe('BugsPage for a team Viewer', () => {
+  it('disables status and priority, hides Assign to me, and says why', () => {
+    const query = vi.mocked(useQuery);
+    const original = query.getMockImplementation()!;
+    const readOnly = { ...bugsPageData.teams.nodes[0]!, viewerCanWrite: false };
+    query.mockImplementation((document, options) => {
+      const result = original(document, options);
+      return document === GRAPH_PROJECTS_QUERY ? result : ({ ...result, data: { ...bugsPageData, teams: { nodes: [readOnly] } } } as typeof result);
+    });
+    try {
+      render(<MemoryRouter><BugsPage /></MemoryRouter>);
+      const list = screen.getByRole('list', { name: 'Open bugs list' });
+      expect(within(list).getByLabelText('Status of INV-30')).toBeDisabled();
+      expect(within(list).getByLabelText('Priority of INV-30')).toBeDisabled();
+      expect(within(list).queryByRole('button', { name: 'Assign to me' })).toBeNull();
+      expect(screen.getByRole('note')).toHaveTextContent(READ_ONLY_TEAM_MESSAGE);
+    } finally {
+      query.mockImplementation(original);
+    }
+  });
+
+  it('says edit access is missing, not "refresh and try again", when the server refuses a change', async () => {
+    mockUpdate.mockRejectedValueOnce(new CombinedGraphQLErrors({ errors: [{ message: 'You do not have edit access to this team.', extensions: { code: 'FORBIDDEN' } }] }));
+    render(<MemoryRouter><BugsPage /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText('Priority of INV-30'), { target: { value: '2' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent(READ_ONLY_TEAM_MESSAGE);
+    expect(screen.queryByText(/Refresh and try again/)).toBeNull();
   });
 });

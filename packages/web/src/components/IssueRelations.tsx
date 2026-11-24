@@ -204,7 +204,7 @@ export function IssueRelations({ issueId, disabled = false, onOpen }: IssueRelat
       </div>
 
       {loadError && links.length === 0 ? (
-        <InlineError>{loadErrorMessage(loadError, 'Could not load relations.')}</InlineError>
+        <InlineError>{loadErrorMessage(loadError, 'Could not load relations.', 'Relations')}</InlineError>
       ) : loading && !data ? (
         <p className="issue-panel__empty-hint">Loading relations…</p>
       ) : groups.length === 0 && !adding ? (

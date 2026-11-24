@@ -4198,6 +4198,15 @@ kbd {
   grid-template-columns: 1fr;
 }
 
+/* Groups a candidate card's fields so one `disabled` makes them read-only (INV-2159). */
+.observation-fieldset {
+  display: contents;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
 .observation-contract--edit {
   align-items: start;
 }

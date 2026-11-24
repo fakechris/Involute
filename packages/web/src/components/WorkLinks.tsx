@@ -99,7 +99,7 @@ export function WorkLinks({ workId }: { workId: string }) {
   // Not while the session has ended (INV-2146): the poll would only be refused.
   const sessionEnded = useAuthenticationFailure();
   const { data, error } = useQuery<WorkLinksData, { id: string }>(WORK_LINKS_QUERY, { variables: { id: workId }, fetchPolicy: 'cache-and-network', pollInterval: sessionEnded ? 0 : 60_000 });
-  if (error) return <p role="alert">{loadErrorMessage(error, `Commits and links could not be loaded: ${error.message}`)}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Commits and links could not be loaded: ${error.message}`, 'Commits and links')}</p>;
   const context = data?.workContext;
   if (!context) return null;
 

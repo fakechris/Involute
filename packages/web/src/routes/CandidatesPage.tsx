@@ -15,6 +15,7 @@ import { ProjectFilterCombobox, type AvailableProject } from '../components/Proj
 import { Badge, BulkActionBar, EmptyState, InlineError, LoadingState } from '../components/status';
 import { filtersToIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { useListKeys } from '../components/useListKeys';
+import { changeErrorMessage, isForbiddenError, READ_ONLY_TEAM_MESSAGE } from '../lib/apollo';
 
 export const COMMIT_CANDIDATE_EVENT = 'involute:commit-candidate';
 /** H on a focused candidate in Needs you snoozes it for a week, the card's shortest Snooze (INV-1092). */
@@ -380,6 +381,7 @@ export function CandidateCard({
   onPriorityChange?: (priority: number) => void;
 }) {
   const navigate = useNavigate();
+  const readOnly = candidate.team.viewerCanWrite === false;
   const [acceptance, setAcceptance] = useState(candidate.acceptance ?? '');
   // The whole contract can be settled at commit, not only acceptance (INV-792).
   const [contract, setContract] = useState({
@@ -453,8 +455,8 @@ export function CandidateCard({
         }]);
       }
       onRefresh();
-    } catch {
-      setError('We could not snooze this candidate. Please try again.');
+    } catch (err) {
+      setError(changeErrorMessage(err, 'We could not snooze this candidate. Please try again.'));
     } finally {
       setPendingAction(null);
     }
@@ -555,8 +557,8 @@ export function CandidateCard({
         ]);
       }
       onCommitted();
-    } catch {
-      setError(COMMIT_ERROR_MESSAGE);
+    } catch (err) {
+      setError(changeErrorMessage(err, COMMIT_ERROR_MESSAGE));
     } finally {
       setPendingAction(null);
     }
@@ -584,8 +586,8 @@ export function CandidateCard({
       }
 
       onRejected();
-    } catch {
-      setError(REJECT_ERROR_MESSAGE);
+    } catch (err) {
+      setError(changeErrorMessage(err, REJECT_ERROR_MESSAGE));
     } finally {
       setPendingAction(null);
     }
@@ -600,7 +602,7 @@ export function CandidateCard({
       id={`candidate-${candidate.id}`}
     >
       <header className="observation-card__header">
-        {onToggleSelect ? (
+        {onToggleSelect && !readOnly ? (
           <label className="candidates-select-checkbox" title={`Select ${candidate.identifier}`}>
             <input
               type="checkbox"
@@ -639,142 +641,146 @@ export function CandidateCard({
       <h2 className="observation-card__title">{candidate.title}</h2>
       {candidate.description ? <MarkdownRenderer content={candidate.description} clamp={6} size="sm" className="observation-card__body" /> : null}
       <TriageSuggestions key={`${candidate.id}:${candidate.revision}`} workId={candidate.id} />
-      <div className="observation-contract observation-contract--edit">
-        {(
-          [
-            ['outcome', 'Outcome'],
-            ['scope', 'Scope'],
-            ['constraints', 'Constraints'],
-            ['verification', 'Verification'],
-          ] as const
-        ).map(([field, label]) => (
-          <label key={field} className="observation-field">
-            <span>{label}</span>
-            <textarea
-              aria-label={`${label} for ${candidate.identifier}`}
-              value={contract[field]}
-              rows={2}
-              onChange={(event) => setContract((current) => ({ ...current, [field]: event.target.value }))}
-            />
-          </label>
-        ))}
-      </div>
-      <label className="observation-field">
-        <span>Acceptance</span>
-        <textarea
-          id={`acceptance-${candidate.id}`}
-          aria-label={`Acceptance for ${candidate.identifier}`}
-          value={acceptance}
-          onChange={(event) => setAcceptance(event.target.value)}
-          rows={3}
-        />
-      </label>
-      {startStates.length > 0 ? (
+      {/* A team Viewer reads the card but cannot commit or decline it (INV-2159). */}
+      <fieldset className="observation-fieldset" disabled={readOnly}>
+        <div className="observation-contract observation-contract--edit">
+          {(
+            [
+              ['outcome', 'Outcome'],
+              ['scope', 'Scope'],
+              ['constraints', 'Constraints'],
+              ['verification', 'Verification'],
+            ] as const
+          ).map(([field, label]) => (
+            <label key={field} className="observation-field">
+              <span>{label}</span>
+              <textarea
+                aria-label={`${label} for ${candidate.identifier}`}
+                value={contract[field]}
+                rows={2}
+                onChange={(event) => setContract((current) => ({ ...current, [field]: event.target.value }))}
+              />
+            </label>
+          ))}
+        </div>
         <label className="observation-field">
-          <span>Starts in</span>
+          <span>Acceptance</span>
+          <textarea
+            id={`acceptance-${candidate.id}`}
+            aria-label={`Acceptance for ${candidate.identifier}`}
+            value={acceptance}
+            onChange={(event) => setAcceptance(event.target.value)}
+            rows={3}
+          />
+        </label>
+        {startStates.length > 0 ? (
+          <label className="observation-field">
+            <span>Starts in</span>
+            <Select
+              size="sm"
+              aria-label={`Starting state for ${candidate.identifier}`}
+              value={targetStateId}
+              onChange={(event) => setTargetStateId(event.target.value)}
+            >
+              <option value="">Default (as proposed, or Ready)</option>
+              {startStates.map((state) => (
+                <option key={state.id} value={state.id}>
+                  {state.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
+        <label className="observation-field">
+          <span>Human owner</span>
           <Select
             size="sm"
-            aria-label={`Starting state for ${candidate.identifier}`}
-            value={targetStateId}
-            onChange={(event) => setTargetStateId(event.target.value)}
+            aria-label={`Owner for ${candidate.identifier}`}
+            value={assigneeId}
+            onChange={(event) => setAssigneeId(event.target.value)}
           >
-            <option value="">Default (as proposed, or Ready)</option>
-            {startStates.map((state) => (
-              <option key={state.id} value={state.id}>
-                {state.name}
+            <option value="">Select owner</option>
+            {humans.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name ?? user.email ?? user.id}
               </option>
             ))}
           </Select>
         </label>
-      ) : null}
-      <label className="observation-field">
-        <span>Human owner</span>
-        <Select
-          size="sm"
-          aria-label={`Owner for ${candidate.identifier}`}
-          value={assigneeId}
-          onChange={(event) => setAssigneeId(event.target.value)}
-        >
-          <option value="">Select owner</option>
-          {humans.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name ?? user.email ?? user.id}
-            </option>
-          ))}
-        </Select>
-      </label>
-      <ParentField candidate={candidate} value={parentChoice} onChange={setParentChoice} />
-      <DialogFields definitions={fieldDefinitions} values={fieldValues} onChange={setFieldValues} disabled={pendingAction !== null} />
-      {isBug ? (
-        <label className="observation-field">
-          <span>Priority (sets the SLA)</span>
-          <Select
-            size="sm"
-            aria-label={`Priority for ${candidate.identifier}`}
-            value={priority}
-            onChange={(event) => {
-              const next = Number(event.target.value);
-              setPriority(next);
-              onPriorityChange?.(next);
-            }}
-          >
-            <option value={0} disabled>
-              Choose a priority
-            </option>
-            <option value={1}>Urgent — 24h</option>
-            <option value={2}>High — 48h</option>
-            <option value={3}>Medium — 7 days</option>
-            <option value={4}>Low — 7 days</option>
-          </Select>
-        </label>
-      ) : null}
-      {(candidate.dependencyHints ?? []).length > 0 ? (
-        <div className="observation-dependency-hint" role="note" aria-label={`Dependency hints for ${candidate.identifier}`}>
-          <span>Reads like it depends on</span>
-          {(candidate.dependencyHints ?? []).map((identifier) => (
-            <Btn
-              key={identifier}
-              variant="subtle"
-              disabled={pendingAction !== null}
-              title={`Link: ${identifier} blocks ${candidate.identifier}`}
-              onClick={() => void handleRecordBlocker(identifier)}
+        <ParentField candidate={candidate} value={parentChoice} onChange={setParentChoice} />
+        <DialogFields definitions={fieldDefinitions} values={fieldValues} onChange={setFieldValues} disabled={pendingAction !== null} />
+        {isBug ? (
+          <label className="observation-field">
+            <span>Priority (sets the SLA)</span>
+            <Select
+              size="sm"
+              aria-label={`Priority for ${candidate.identifier}`}
+              value={priority}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setPriority(next);
+                onPriorityChange?.(next);
+              }}
             >
-              {identifier} blocks this
-            </Btn>
-          ))}
-          <span className="observation-card__meta">Not linked as blocking yet. Link it if this item must wait.</span>
-        </div>
-      ) : null}
-      <label className="observation-field">
-        <span>Resolution</span>
-        <ResolutionSelect ariaLabel={`Resolution for ${candidate.identifier}`} value={resolution} onChange={setResolution} />
-      </label>
-      <label className="observation-field">
-        <span>Reject reason</span>
-        <input
-          aria-label={`Decline reason for ${candidate.identifier}`}
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          placeholder={isBug ? 'Required to decline a bug' : 'Optional'}
-        />
-      </label>
+              <option value={0} disabled>
+                Choose a priority
+              </option>
+              <option value={1}>Urgent — 24h</option>
+              <option value={2}>High — 48h</option>
+              <option value={3}>Medium — 7 days</option>
+              <option value={4}>Low — 7 days</option>
+            </Select>
+          </label>
+        ) : null}
+        {(candidate.dependencyHints ?? []).length > 0 ? (
+          <div className="observation-dependency-hint" role="note" aria-label={`Dependency hints for ${candidate.identifier}`}>
+            <span>Reads like it depends on</span>
+            {(candidate.dependencyHints ?? []).map((identifier) => (
+              <Btn
+                key={identifier}
+                variant="subtle"
+                disabled={pendingAction !== null}
+                title={`Link: ${identifier} blocks ${candidate.identifier}`}
+                onClick={() => void handleRecordBlocker(identifier)}
+              >
+                {identifier} blocks this
+              </Btn>
+            ))}
+            <span className="observation-card__meta">Not linked as blocking yet. Link it if this item must wait.</span>
+          </div>
+        ) : null}
+        <label className="observation-field">
+          <span>Resolution</span>
+          <ResolutionSelect ariaLabel={`Resolution for ${candidate.identifier}`} value={resolution} onChange={setResolution} />
+        </label>
+        <label className="observation-field">
+          <span>Reject reason</span>
+          <input
+            aria-label={`Decline reason for ${candidate.identifier}`}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder={isBug ? 'Required to decline a bug' : 'Optional'}
+          />
+        </label>
+      </fieldset>
+      {readOnly ? <p className="page-note" role="note">{READ_ONLY_TEAM_MESSAGE}</p> : null}
       {error ? <InlineError>{error}</InlineError> : null}
       <div className="observation-card__actions">
         {(() => {
-          const blocked = pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority || missingFields.length > 0;
+          const blocked = readOnly || pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority || missingFields.length > 0;
           commitRef.current = () => {
             if (!blocked) void handleCommit();
             else document.getElementById(`acceptance-${candidate.id}`)?.focus();
           };
           snoozeRef.current = () => {
-            if (pendingAction === null && !snoozed) void handleSnooze(7);
+            if (!readOnly && pendingAction === null && !snoozed) void handleSnooze(7);
           };
           return null;
         })()}
         <Btn
           variant="accent"
           icon={<IcoCheck size={12} />}
-          disabled={pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority || missingFields.length > 0}
+          disabled={readOnly || pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority || missingFields.length > 0}
           {...(missingParent && !parentChoice
             ? { title: 'Choose a parent first: committed work must belong somewhere.' }
             : needsPriority
@@ -789,22 +795,22 @@ export function CandidateCard({
         <Btn
           variant="danger"
           icon={<IcoClose size={12} />}
-          disabled={pendingAction !== null || Boolean(rejectBlockedReason)}
+          disabled={readOnly || pendingAction !== null || Boolean(rejectBlockedReason)}
           {...(rejectBlockedReason ? { title: rejectBlockedReason } : {})}
           onClick={() => void handleReject()}
         >
           {pendingAction === 'reject' ? 'Declining…' : 'Decline'}
         </Btn>
         {snoozed ? (
-          <Btn variant="ghost" disabled={pendingAction !== null} onClick={() => void handleSnooze(null)}>
+          <Btn variant="ghost" disabled={readOnly || pendingAction !== null} onClick={() => void handleSnooze(null)}>
             Wake now
           </Btn>
         ) : (
           <>
-            <Btn variant="ghost" disabled={pendingAction !== null} onClick={() => void handleSnooze(7)}>
+            <Btn variant="ghost" disabled={readOnly || pendingAction !== null} onClick={() => void handleSnooze(7)}>
               Snooze 7d
             </Btn>
-            <Btn variant="ghost" disabled={pendingAction !== null} onClick={() => void handleSnooze(30)}>
+            <Btn variant="ghost" disabled={readOnly || pendingAction !== null} onClick={() => void handleSnooze(30)}>
               Snooze 30d
             </Btn>
           </>
@@ -813,7 +819,7 @@ export function CandidateCard({
           Open context
         </Btn>
       </div>
-      {!snoozed && otherCandidates.length > 0 ? (
+      {!snoozed && !readOnly && otherCandidates.length > 0 ? (
         <label className="observation-field observation-field--inline">
           <span>Mark duplicate of</span>
           <Select
@@ -1156,7 +1162,7 @@ export function CandidatesPage() {
         }
       } catch (err) {
         failCount++;
-        failures.push({ identifier: candidate.identifier, reason: err instanceof Error ? err.message : 'failed' });
+        failures.push({ identifier: candidate.identifier, reason: isForbiddenError(err) ? READ_ONLY_TEAM_MESSAGE : err instanceof Error ? err.message : 'failed' });
       }
       setBulkProgress({ done: i + 1, total: toCommit.length });
     }
@@ -1204,7 +1210,7 @@ export function CandidatesPage() {
         successCount++;
       } catch (err) {
         failCount++;
-        rejectFailures.push({ identifier: candidate.identifier, reason: err instanceof Error ? err.message : 'failed' });
+        rejectFailures.push({ identifier: candidate.identifier, reason: isForbiddenError(err) ? READ_ONLY_TEAM_MESSAGE : err instanceof Error ? err.message : 'failed' });
       }
       setBulkProgress({ done: i + 1, total: toReject.length });
     }

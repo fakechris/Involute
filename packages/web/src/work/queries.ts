@@ -37,6 +37,7 @@ export const CANDIDATE_WORK_FIELDS = gql`
     team {
       id
       key
+      viewerCanWrite
     }
     assignee {
       id
@@ -155,6 +156,7 @@ export const IN_REVIEW_PAGE_QUERY = gql`
         team {
           id
           key
+          viewerCanWrite
         }
         assignee {
           id
@@ -822,6 +824,15 @@ export const WORK_HYGIENE_QUERY = gql`
 `;
 
 // Saved views on the server (INV-1005): the state travels as JSON text.
+// Who GraphQL says is signed in, for keeping saved views in token sign-in mode (INV-2157).
+export const SAVED_VIEWS_ACCOUNT_QUERY = gql`
+  query SavedViewsAccount {
+    viewer {
+      id
+    }
+  }
+`;
+
 export const SAVED_VIEWS_QUERY = gql`
   query SavedViews($teamKey: String!) {
     savedViews(teamKey: $teamKey) {

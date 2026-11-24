@@ -57,6 +57,8 @@ export interface CandidateWork {
   team: {
     id: string;
     key: string;
+    /** False when the viewer may only read this team (Viewer role): no Commit, Decline, Accept or Return. */
+    viewerCanWrite?: boolean;
   };
   assignee: WorkUserSummary | null;
   state: WorkflowStateSummary;

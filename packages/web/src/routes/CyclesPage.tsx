@@ -48,7 +48,8 @@ import { STATE_TYPE_LABEL } from '../components/graph/graph-colors';
 import { DialogShell } from '../components/DialogShell';
 import { Field, TextArea, TextInput } from '../components/controls';
 import { PageBody, PageHeader } from '../components/layout';
-import { Badge, EmptyState, LoadingState, SegmentedControl } from '../components/status';
+import { Badge, EmptyState, InlineError, LoadingState, QueryErrorState, SegmentedControl } from '../components/status';
+import { changeErrorMessage, READ_ONLY_TEAM_MESSAGE } from '../lib/apollo';
 
 type ViewTab = 'milestones' | 'cycles';
 
@@ -105,6 +106,7 @@ export function CyclesPage() {
   // A new milestone goes directly under its project (INV-744/792).
   const [milestonePlacement, setMilestonePlacement] = useState<CreatePlacement | null>(null);
   const [milestoneError, setMilestoneError] = useState<string | null>(null);
+  const [milestoneListError, setMilestoneListError] = useState<string | null>(null);
   const { data: milestoneProjectsData } = useQuery<GraphProjectsQueryData>(GRAPH_PROJECTS_QUERY, {
     variables: teamKey ? { teamFilter: { key: { eq: teamKey } } } : {},
   });
@@ -124,7 +126,7 @@ export function CyclesPage() {
   }
 
   // Milestones query
-  const { data: milestoneData, loading: milestoneLoading, refetch: refetchMilestones } = useQuery<
+  const { data: milestoneData, error: milestoneLoadError, loading: milestoneLoading, refetch: refetchMilestones } = useQuery<
     MilestoneIssuesQueryData,
     MilestoneIssuesQueryVariables
   >(MILESTONE_ISSUES_QUERY, {
@@ -241,9 +243,28 @@ export function CyclesPage() {
     setIsMilestoneDialogOpen(false);
   }
 
+  async function submitMilestone(e: React.FormEvent) {
+    try {
+      await handleMilestoneSubmit(e);
+    } catch (error) {
+      // A refusal thrown by the server (no edit access) is shown in the dialog (INV-2160).
+      setMilestoneError(changeErrorMessage(error, milestoneDialogMode === 'create' ? 'Could not create the milestone.' : 'Could not save the milestone.'));
+    }
+  }
+
   async function handleMilestoneDelete(id: string) {
     if (!window.confirm('Delete this milestone? This cannot be undone.')) return;
-    await runIssueDelete({ variables: { id } });
+    setMilestoneListError(null);
+    try {
+      const result = await runIssueDelete({ variables: { id } });
+      if (result.data && !result.data.issueDelete.success) {
+        setMilestoneListError('Could not delete the milestone.');
+        return;
+      }
+    } catch (error) {
+      setMilestoneListError(changeErrorMessage(error, 'Could not delete the milestone.'));
+      return;
+    }
     void refetchMilestones();
   }
 
@@ -366,8 +387,11 @@ export function CyclesPage() {
 
       <PageBody width="wide">
         {activeTab === 'milestones' ? (
-          milestoneLoading ? (
+          milestoneLoading && milestones.length === 0 ? (
             <LoadingState>Loading milestones…</LoadingState>
+          ) : milestoneLoadError && milestones.length === 0 ? (
+            // A failed read is not "no milestones" (INV-2162); an ended session is shown by the shell notice.
+            <QueryErrorState title="Could not load milestones" onRetry={refetchMilestones} />
           ) : milestones.length === 0 ? (
             <EmptyState
               icon={<IcoCycle size={20} />}
@@ -381,6 +405,8 @@ export function CyclesPage() {
             />
           ) : (
             <>
+              {milestoneListError ? <InlineError>{milestoneListError}</InlineError> : null}
+              {!canWriteTeam && selectedTeam ? <p className="page-note" role="note">{READ_ONLY_TEAM_MESSAGE}</p> : null}
               {activeMilestones.length > 0 && (
                 <section className="cycles-section">
                   <h2 className="cycles-section__title">In progress</h2>
@@ -392,9 +418,11 @@ export function CyclesPage() {
                         <Btn variant="ghost" size="sm" onClick={() => navigate(`/work/${milestone.id}`)}>
                           Work context
                         </Btn>
-                        <Btn variant="ghost" icon={<IcoSettings size={12} />} size="sm" onClick={() => openEditMilestone(milestone)}>
-                          Configure
-                        </Btn>
+                        {canWriteTeam ? (
+                          <Btn variant="ghost" icon={<IcoSettings size={12} />} size="sm" onClick={() => openEditMilestone(milestone)}>
+                            Configure
+                          </Btn>
+                        ) : null}
                       </div>
                       {renderProgress(milestone.children?.nodes ?? [], true)}
                       {(milestone.children?.nodes ?? []).length > 0 && renderIssueLinks(milestone.children.nodes)}
@@ -412,6 +440,7 @@ export function CyclesPage() {
                       milestone={milestone}
                       onEdit={() => openEditMilestone(milestone)}
                       onDelete={() => void handleMilestoneDelete(milestone.id)}
+                      canEdit={canWriteTeam}
                       onNavigate={() => navigate(`/work/${milestone.id}`)}
                     />
                   ))}
@@ -427,6 +456,7 @@ export function CyclesPage() {
                       milestone={milestone}
                       onEdit={() => openEditMilestone(milestone)}
                       onDelete={() => void handleMilestoneDelete(milestone.id)}
+                      canEdit={canWriteTeam}
                       onNavigate={() => navigate(`/work/${milestone.id}`)}
                     />
                   ))}
@@ -497,7 +527,7 @@ export function CyclesPage() {
           variant="modal"
           title={milestoneDialogMode === 'create' ? 'New milestone' : 'Edit milestone'}
           onClose={() => setIsMilestoneDialogOpen(false)}
-          onSubmit={(e) => void handleMilestoneSubmit(e)}
+          onSubmit={(e) => void submitMilestone(e)}
           footer={(
             <>
               <Btn variant="subtle" size="md" onClick={() => setIsMilestoneDialogOpen(false)}>Cancel</Btn>
@@ -598,11 +628,14 @@ export function CyclesPage() {
 
 function MilestoneRow({
   milestone,
+  canEdit,
   onEdit,
   onDelete,
   onNavigate,
 }: {
   milestone: MilestoneIssueSummary;
+  /** False for a team Viewer: no Edit or Delete (INV-2160). */
+  canEdit: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onNavigate: () => void;
@@ -618,8 +651,12 @@ function MilestoneRow({
       trailing={
         <>
           <Btn variant="ghost" size="sm" onClick={onNavigate}>Context</Btn>
-          <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
-          <Btn variant="danger" size="sm" onClick={onDelete}>Delete</Btn>
+          {canEdit ? (
+            <>
+              <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
+              <Btn variant="danger" size="sm" onClick={onDelete}>Delete</Btn>
+            </>
+          ) : null}
         </>
       }
     />

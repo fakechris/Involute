@@ -129,9 +129,26 @@ export function isAuthenticationError(error: unknown): boolean {
   return error instanceof Error && missingSession(error.message);
 }
 
-export function loadErrorMessage(error: unknown, fallback?: string): string | undefined {
-  if (isAuthenticationError(error)) return 'Your session ended.';
+/**
+ * `section` names the part of a page that failed, so several failed parts of one
+ * drawer are told apart and the session notice above them is not repeated (INV-2141).
+ */
+export function loadErrorMessage(error: unknown, fallback?: string, section?: string): string | undefined {
+  if (isAuthenticationError(error)) return section ? `${section} did not load. Sign in again to see it.` : 'Your session ended.';
   return fallback ?? (error instanceof Error ? error.message : undefined);
+}
+
+/** The server refused a change because the viewer may only read this team (docs/permissions.md). */
+export function isForbiddenError(error: unknown): boolean {
+  return CombinedGraphQLErrors.is(error) && error.errors.some(({ extensions }) => extensions?.code === 'FORBIDDEN');
+}
+
+/** What a person without edit access reads instead of "refresh and try again" (INV-2158..2161). */
+export const READ_ONLY_TEAM_MESSAGE = 'You can view this team but not change its work. Ask a team owner for edit access.';
+
+/** The message for a failed change: no edit access, or the page's own fallback. */
+export function changeErrorMessage(error: unknown, fallback: string): string {
+  return isForbiddenError(error) ? READ_ONLY_TEAM_MESSAGE : fallback;
 }
 
 export function createApolloClient(onAuthenticationError?: () => void) {
