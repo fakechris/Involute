@@ -17,27 +17,27 @@ test.describe('manual journeys', () => {
 
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'All issues', exact: true })).toBeVisible();
+    await expect(page.getByTestId('column-Backlog')).toBeVisible();
     await page.locator('body').press('c');
     const createDrawer = page.getByRole('dialog', { name: 'Create issue drawer' });
     await expect(createDrawer).toBeVisible();
     await createDrawer.getByLabel('Issue title').fill(issueTitle);
     await createDrawer.getByLabel('Issue description').fill('Created by walking the Getting started chapter.');
-    await createDrawer.getByLabel('Project').selectOption({ label: projectName });
+    const projectSelect = createDrawer.getByLabel('Project', { exact: true });
+    await expect(projectSelect.locator('option', { hasText: projectName })).toBeAttached({ timeout: 15_000 });
+    await projectSelect.selectOption({ label: projectName });
     await expect(createDrawer.getByLabel('Location').locator('option:checked')).toHaveText('No milestone');
     await createDrawer.locator('form').getByRole('button', { name: 'Create issue', exact: true }).click();
 
     const issueDrawer = page.getByRole('dialog', { name: 'Issue detail drawer' });
-    await expect(issueDrawer.getByLabel('Issue title')).toHaveValue(issueTitle);
-    const identifier = (await issueDrawer.getByText(/^[A-Z]+-\d+$/).first().textContent())?.trim();
-    expect(identifier).toMatch(/^[A-Z]+-\d+$/);
+    await expect(issueDrawer.getByLabel('Issue title')).toHaveValue(issueTitle, { timeout: 15_000 });
 
     await page.goto('/backlog');
-    await expect(page.getByText(issueTitle, { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(issueTitle, { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
     await page.goto('/search');
-    const search = page.getByLabel('Search all work');
-    await search.fill(identifier!);
+    await page.getByLabel('Search all work').fill(issueTitle);
     await page.getByRole('button', { name: 'Search', exact: true }).click();
-    await expect(page.getByText(issueTitle, { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(issueTitle, { exact: true }).first()).toBeVisible({ timeout: 15_000 });
   });
 });

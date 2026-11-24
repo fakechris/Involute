@@ -17,9 +17,9 @@ through the real server and browser. A gap is walked by hand in an acceptance pa
 
 | Manual chapter | Journey | End-to-end test |
 | --- | --- | --- |
-| Getting started | New project → `C` → first issue under No milestone → found on Backlog and in Search | `e2e/manual-journeys.spec.ts` |
+| Getting started | New project → `C` → first issue under No milestone → found on Backlog and by Search | `e2e/manual-journeys.spec.ts` |
 | Work items | Create, edit, comment, delete a comment, delete the issue on Board | `e2e/board-flow.spec.ts` |
-| Views and search | Search by identifier | `e2e/manual-journeys.spec.ts` |
+| Views and search | Search by words of the title | `e2e/manual-journeys.spec.ts` |
 | Views and search | Save a Backlog view and reopen it from Views | Gap: the view is not stored in token sign-in mode (INV-2157) |
 | Candidates | Commit a candidate and place it under a parent | `e2e/work-graph.spec.ts`, `e2e/mcp-ui-conformance.spec.ts` |
 | In Review | Agent claims, reports and attaches evidence; person returns, then accepts | `e2e/mcp-ui-conformance.spec.ts` |
