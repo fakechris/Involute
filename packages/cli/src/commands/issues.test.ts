@@ -12,7 +12,7 @@ const DEFAULT_TEAM_KEY = 'INV';
 
 const TEST_AUTH_TOKEN = 'cli-issues-test-token';
 
-describe('issue-related CLI commands', () => {
+describe.runIf(Boolean(process.env['DATABASE_URL']))('issue-related CLI commands', () => {
   let prisma: PrismaClient;
   let server: StartedServer;
   let tempDir: string;

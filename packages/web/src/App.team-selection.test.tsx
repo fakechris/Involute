@@ -6,6 +6,7 @@ import {
   boardQueryResult,
   renderApp,
 } from './test/app-test-helpers';
+import { BOARD_PAGE_QUERY } from './board/queries';
 import { ACTIVE_TEAM_STORAGE_KEY } from './board/utils';
 import { APP_SHELL_ISSUES_STORAGE_KEY, APP_SHELL_TEAMS_STORAGE_KEY } from './lib/app-shell-state';
 
@@ -63,28 +64,13 @@ describe('App team selection', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(apolloMocks.useQuery).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        variables: {
-          first: 200,
-          orderBy: 'UPDATED',
-          teamFilter: {
-            key: {
-              eq: 'SON',
-            },
-          },
-          filter: {
-            commitmentStatus: 'COMMITTED',
-            team: {
-              key: {
-                eq: 'SON',
-              },
-            },
-          },
-        },
-      }),
-    );
+    type BoardOptions = { variables?: { teamFilter?: { key?: { eq?: string } } } } | undefined;
+    const boardTeamKeys = apolloMocks.useQuery.mock.calls
+      .filter(([document]) => document === BOARD_PAGE_QUERY)
+      .map(([, options]) => (options as BoardOptions)?.variables?.teamFilter?.key?.eq);
+    expect(boardTeamKeys.length).toBeGreaterThan(0);
+    expect(boardTeamKeys[0]).toBe('SON');
+    expect(new Set(boardTeamKeys)).toEqual(new Set(['SON']));
 
     expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
   });

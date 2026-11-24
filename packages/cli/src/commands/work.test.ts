@@ -13,7 +13,7 @@ const DEFAULT_ADMIN_EMAIL = 'admin@involute.local';
 const DEFAULT_TEAM_KEY = 'INV';
 const TEST_AUTH_TOKEN = 'cli-work-test-token';
 
-describe('work CLI commands', () => {
+describe.runIf(Boolean(process.env['DATABASE_URL']))('work CLI commands', () => {
   let prisma: PrismaClient;
   let server: StartedServer;
   let uploadsDir: string;
