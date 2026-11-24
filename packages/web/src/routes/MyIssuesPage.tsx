@@ -1,5 +1,6 @@
 import { useQuery } from '@apollo/client/react';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { BOARD_PAGE_QUERY } from '../board/queries';
 import type { BoardPageQueryData, BoardPageQueryVariables, IssueSummary, WorkflowStateType } from '../board/types';
@@ -7,10 +8,10 @@ import { readStoredTeamKey } from '../board/utils';
 import { Select } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { IssueRow } from '../components/list';
-import { Avatar } from '../components/Primitives';
+import { Avatar, Btn } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { EmptyState, LoadingState } from '../components/status';
-import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
+import { useWorkFilters, WorkFilterBar, WORK_FILTER_KEYS } from '../components/WorkFilterBar';
 import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
 function formatTimeAgo(date: string): string {
@@ -27,9 +28,10 @@ function formatTimeAgo(date: string): string {
   return `${Math.floor(days / 30)}mo`;
 }
 
-function classifyState(stateType: WorkflowStateType): 'progress' | 'todo' | 'backlog' | 'completed' {
+function classifyState(stateType: WorkflowStateType): 'progress' | 'review' | 'todo' | 'backlog' | 'completed' {
   switch (stateType) {
     case 'STARTED': return 'progress';
+    case 'REVIEW': return 'review';
     case 'COMPLETED':
     case 'CANCELED': return 'completed';
     case 'BACKLOG': return 'backlog';
@@ -46,10 +48,11 @@ interface IssueGroup {
 export function MyIssuesPage() {
   const teamKey = readStoredTeamKey();
   const [filterStateType, setFilterStateType] = useState<WorkflowStateType | ''>('');
+  const [, setParams] = useSearchParams();
   const [project, setProject] = useProjectParam();
   const workFilters = useWorkFilters();
 
-  const { data, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
+  const { data, loading, error, refetch } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: {
       first: 500,
       // This page searches the bodies, so it asks for them (INV-1470); the
@@ -88,6 +91,7 @@ export function MyIssuesPage() {
 
   const groups = useMemo<IssueGroup[]>(() => {
     const progress: IssueSummary[] = [];
+    const review: IssueSummary[] = [];
     const todo: IssueSummary[] = [];
     const backlog: IssueSummary[] = [];
     const completed: IssueSummary[] = [];
@@ -95,6 +99,7 @@ export function MyIssuesPage() {
     for (const issue of myIssues) {
       const group = classifyState(issue.state.type);
       if (group === 'progress') progress.push(issue);
+      else if (group === 'review') review.push(issue);
       else if (group === 'completed') completed.push(issue);
       else if (group === 'backlog') backlog.push(issue);
       else todo.push(issue);
@@ -102,11 +107,22 @@ export function MyIssuesPage() {
 
     return [
       { label: 'In progress', items: progress },
+      { label: 'In Review', items: review },
       { label: 'Todo', items: todo },
       { label: 'Backlog', items: backlog },
       { label: 'Completed', items: completed },
     ];
   }, [myIssues]);
+
+  function clearAllFilters() {
+    setFilterStateType('');
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete('project');
+      for (const key of WORK_FILTER_KEYS) next.delete(key);
+      return next;
+    });
+  }
 
   const firstAssignee = myIssues[0]?.assignee ?? null;
   const viewerUser = firstAssignee ? { name: firstAssignee.name ?? undefined, email: firstAssignee.email ?? undefined } : null;
@@ -139,6 +155,7 @@ export function MyIssuesPage() {
               <option value="BACKLOG">Backlog</option>
               <option value="UNSTARTED">Unstarted</option>
               <option value="STARTED">Started</option>
+              <option value="REVIEW">In Review</option>
               <option value="COMPLETED">Completed</option>
               <option value="CANCELED">Canceled</option>
             </Select>
@@ -146,11 +163,25 @@ export function MyIssuesPage() {
         }
       />
 
-      <PageBody width="full" padding={loading || myIssues.length === 0 ? 'default' : 'none'}>
-        {loading ? (
+      <PageBody width="full" padding={error || loading || myIssues.length === 0 ? 'default' : 'none'}>
+        {error ? (
+          <div role="alert">
+            <EmptyState
+              title="Could not load your issues"
+              body={error.message}
+              action={<Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>}
+            />
+          </div>
+        ) : loading ? (
           <LoadingState>Loading issues…</LoadingState>
-        ) : myIssues.length === 0 ? (
+        ) : allIssues.length === 0 ? (
           <EmptyState title="No issues assigned to you" body="Issues assigned to your account will appear here." />
+        ) : myIssues.length === 0 ? (
+          <EmptyState
+            title="No issues match your filters"
+            body="Clear your filters to see all your assigned issues in this view."
+            action={<Btn variant="subtle" onClick={clearAllFilters}>Clear all filters</Btn>}
+          />
         ) : (
           groups.map((g) =>
             g.items.length === 0 ? null : (
@@ -180,4 +211,3 @@ export function MyIssuesPage() {
     </div>
   );
 }
-
