@@ -56,7 +56,7 @@ describe('needinfo on the issue page (INV-1119)', () => {
     expect(options).toEqual(['Choose who should answer', 'Rita', 'Fixer (agent)']);
     fireEvent.change(select, { target: { value: 'u-2' } });
     fireEvent.change(screen.getByLabelText('What do you need to know'), { target: { value: ' Which browser? ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send needinfo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     await waitFor(() =>
       expect(mockRequest).toHaveBeenCalledWith({ variables: { input: { workId: 'issue-1', targetId: 'u-2', question: 'Which browser?' } } }),
     );
@@ -69,27 +69,27 @@ describe('needinfo on the issue page (INV-1119)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask for info' }));
     fireEvent.change(screen.getByLabelText('Who should answer'), { target: { value: 'a-1' } });
     fireEvent.change(screen.getByLabelText('What do you need to know'), { target: { value: 'Regression?' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send needinfo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already an open needinfo');
   });
 
   it('lets whoever asked withdraw an open needinfo, and nobody else but an admin', async () => {
     render(<NeedInfoWithdrawButton request={needInfo('SUBMITTED')} viewer={viewer} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Withdraw needinfo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw question' }));
     await waitFor(() => expect(mockWithdraw).toHaveBeenCalledWith({ variables: { requestId: 'req-1', reason: null } }));
     cleanup();
 
     render(<NeedInfoWithdrawButton request={needInfo('SUBMITTED', 'someone-else')} viewer={viewer} />);
-    expect(screen.queryByRole('button', { name: 'Withdraw needinfo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Withdraw question' })).toBeNull();
     cleanup();
 
     render(<NeedInfoWithdrawButton request={needInfo('COMPLETED')} viewer={viewer} />);
-    expect(screen.queryByRole('button', { name: 'Withdraw needinfo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Withdraw question' })).toBeNull();
     cleanup();
 
     vi.spyOn(window, 'prompt').mockReturnValue('Reporter left');
     render(<NeedInfoWithdrawButton request={needInfo('SUBMITTED', 'someone-else')} viewer={{ ...viewer, globalRole: 'ADMIN' }} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Withdraw needinfo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw question' }));
     await waitFor(() => expect(mockWithdraw).toHaveBeenCalledWith({ variables: { requestId: 'req-1', reason: 'Reporter left' } }));
   });
 });

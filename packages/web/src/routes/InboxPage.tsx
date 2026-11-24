@@ -56,15 +56,15 @@ function formatNotificationType(type: string): string {
     case 'work.accepted':
       return 'Work accepted';
     case 'work.committed':
-      return 'Proposal committed';
+      return 'Candidate committed';
     case 'work.rejected':
-      return 'Proposal declined';
+      return 'Candidate declined';
     case 'work.uncommitted':
       return 'Moved back to candidates';
     case 'work.review_rejected':
       return 'Returned to Ready';
     case 'work.claim_expired':
-      return 'Agent lease expired';
+      return 'Agent claim expired';
     case 'run.stale':
       return 'Agent run went quiet';
     case 'review.overdue':
@@ -78,9 +78,9 @@ function formatNotificationType(type: string): string {
     case 'incident.closable':
       return 'Incident can be closed';
     case 'delivery.approved':
-      return 'Delivery authorized';
+      return 'Delivery change approved';
     case 'executor.dispatched':
-      return 'Execution dispatched';
+      return 'Sent to an agent';
     case 'delivery.declined':
       return 'Delivery change declined';
     case 'contract.breached':
@@ -110,7 +110,7 @@ function formatNotificationType(type: string): string {
     case 'delivery.proposed':
       return 'Delivery change proposed';
     case 'executor.exhausted':
-      return 'Implementation ran out of attempts';
+      return 'Agent gave up after all attempts';
     case 'contract.amendment_accepted':
       return 'Contract change accepted';
     case 'contract.amendment_rejected':

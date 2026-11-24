@@ -81,7 +81,7 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
     test: 'components/AgentRequestActions.test.tsx',
   },
   needInfoRequest: { kind: 'web', doc: 'NEED_INFO_REQUEST_MUTATION', components: ['components/NeedInfoControl.tsx'], label: 'Ask for info', test: 'components/NeedInfoControl.test.tsx' },
-  needInfoWithdraw: { kind: 'web', doc: 'NEED_INFO_WITHDRAW_MUTATION', components: ['components/NeedInfoControl.tsx'], label: 'Withdraw needinfo', test: 'components/NeedInfoControl.test.tsx' },
+  needInfoWithdraw: { kind: 'web', doc: 'NEED_INFO_WITHDRAW_MUTATION', components: ['components/NeedInfoControl.tsx'], label: 'Withdraw question', test: 'components/NeedInfoControl.test.tsx' },
   agentRequestReply: { kind: 'web', doc: 'AGENT_REQUEST_REPLY_MUTATION', components: ['components/AgentRequestActions.tsx'], label: 'Reply to agent', test: 'components/AgentRequestActions.test.tsx' },
   actorSetSuccessor: { kind: 'web', doc: 'ACTOR_SET_SUCCESSOR_MUTATION', components: ['components/ActorSuccessorControl.tsx'], label: 'Successor', test: 'components/AgentRequestActions.test.tsx' },
   bugReport: { kind: 'web', doc: 'BUG_REPORT_MUTATION', components: ['components/ReportBugDialog.tsx'], label: 'Report bug', test: 'components/ReportBugDialog.test.tsx' },
@@ -91,14 +91,14 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
     kind: 'web',
     doc: 'CONTRACT_AMENDMENT_ACCEPT_MUTATION',
     components: ['components/ContractAmendmentPanel.tsx'],
-    label: 'Accept change',
+    label: 'Approve change',
     test: 'components/ContractAmendmentPanel.test.tsx',
   },
   contractAmendmentReject: {
     kind: 'web',
     doc: 'CONTRACT_AMENDMENT_REJECT_MUTATION',
     components: ['components/ContractAmendmentPanel.tsx'],
-    label: 'Reject change',
+    label: 'Decline change',
     test: 'components/ContractAmendmentPanel.test.tsx',
   },
   cycleCreate: { kind: 'web', doc: 'CYCLE_CREATE_MUTATION', components: ['routes/CyclesPage.tsx'], test: 'routes/CyclesPage.test.tsx' },
@@ -180,7 +180,7 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   // or report bugs (bugReport). A person declares an incident through it
   // (labels: ['incident']), which commits it at once (INV-1123).
   workPropose: { kind: 'web', doc: 'INCIDENT_DECLARE_MUTATION', components: ['components/ReportIncidentDialog.tsx'], label: 'Report incident', test: 'components/ReportIncidentDialog.test.tsx' },
-  workReject: { kind: 'web', doc: 'WORK_REJECT_MUTATION', components: ['routes/CandidatesPage.tsx'], label: 'Reject reason', test: 'routes/CandidatesPage.test.tsx' },
+  workReject: { kind: 'web', doc: 'WORK_REJECT_MUTATION', components: ['routes/CandidatesPage.tsx'], label: 'Decline reason', test: 'routes/CandidatesPage.test.tsx' },
   workRestore: { kind: 'web', doc: 'WORK_RESTORE_MUTATION', components: ['routes/CandidatesPage.tsx'], label: 'Restore to candidate', test: 'routes/CandidatesPage.test.tsx' },
   workUncommit: { kind: 'web', doc: 'WORK_UNCOMMIT_MUTATION', components: ['undo/CommitUndoHost.tsx'], label: 'Undo commit', test: 'routes/CandidatesPage.test.tsx' },
   workReview: {
@@ -323,7 +323,7 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
   'incident.follow_up_at_risk': { kind: 'info', actionable: 'info' },
   'incident.follow_up_overdue': { kind: 'info', actionable: 'info' },
   'bug.sla_breached': { kind: 'info', actionable: 'info' },
-  'contract.amendment_proposed': { kind: 'work', action: 'Accept change', component: 'components/ContractAmendmentPanel.tsx', actionable: 'CONTRACT_AMENDMENT' },
+  'contract.amendment_proposed': { kind: 'work', action: 'Approve change', component: 'components/ContractAmendmentPanel.tsx', actionable: 'CONTRACT_AMENDMENT' },
   'decision.requested': { kind: 'work', action: 'Respond to the agent', component: 'components/RespondToAgent.tsx', actionable: 'DECISION_REQUESTED' },
   'agent.request_input_required': { kind: 'work', action: 'Reply to agent', component: 'components/AgentRequestActions.tsx', actionable: 'AGENT_REQUEST' },
   'bug.reported': { kind: 'work', action: 'Triage this candidate', actionable: 'CANDIDATE_COMMIT' },

@@ -376,7 +376,7 @@ describe('App issue detail editing', () => {
     const proposal = within(contract).getByRole('region', { name: 'Proposed contract change' });
     expect(within(proposal).getByText(/three gaps worth fixing/)).toBeInTheDocument();
 
-    fireEvent.click(within(proposal).getByRole('button', { name: 'Accept change' }));
+    fireEvent.click(within(proposal).getByRole('button', { name: 'Approve change' }));
     await waitFor(() => expect(accept).toHaveBeenCalledWith({ variables: { input: { amendmentId: 'amendment-1' } } }));
     await waitFor(() => expect(contractRefetch).toHaveBeenCalled());
   });

@@ -347,7 +347,7 @@ export const POLICY_AUDIT = {
   override: 'policy.override',
 } as const;
 
-/** Human-readable summary of the facts a condition looked at, for "Would be handled under L2: type bug, priority 2". */
+/** Human-readable summary of the facts a condition looked at, for "Automatic at autonomy level 2: type bug, priority 2". */
 export function describeFacts(predicate: Predicate | undefined, facts: AutonomyFacts): string {
   if (!predicate) return '';
   const fields = new Set<ConditionField>();

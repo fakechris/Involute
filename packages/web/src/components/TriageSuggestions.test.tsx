@@ -17,7 +17,7 @@ const similar = { checkId: 'similar_other', kind: 'similar', value: 'same_issue'
 function respond(overrides: Record<string, unknown> = {}) {
   query.mockReturnValue({ data: { workTriageSuggestions: { status: 'advice', degraded: false, observationId: 'obs', suggestions: [similar], ...overrides } } });
 }
-async function ready() { await waitFor(() => expect(screen.getAllByRole('button', { name: 'Accept' })[0]).toBeEnabled()); }
+async function ready() { await waitFor(() => expect(screen.getAllByRole('button', { name: 'Right' })[0]).toBeEnabled()); }
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -86,7 +86,7 @@ describe('candidate triage suggestions', () => {
     await ready();
     expect(exposure).toHaveBeenCalledTimes(2);
   });
-  it.each([['Accept', 'accepted', 'Accepted'], ['Reject', 'rejected', 'Rejected']])('stores %s via triageSuggestionFeedback only, never links work', async (button, verdict, stored) => {
+  it.each([['Right', 'accepted', 'Right'], ['Wrong', 'rejected', 'Wrong']])('stores %s via triageSuggestionFeedback only, never links work', async (button, verdict, stored) => {
     render(<TriageSuggestions workId="work" />);
     await ready();
     fireEvent.click(screen.getByRole('button', { name: button }));
@@ -132,7 +132,7 @@ describe('candidate triage suggestions', () => {
     feedback.mockResolvedValue({ data: { triageSuggestionFeedback: { success: false, message: 'Observation is stale; reload suggestions.' } } });
     render(<TriageSuggestions workId="work" />);
     await ready();
-    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Wrong' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Observation is stale; reload suggestions.');
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
@@ -140,15 +140,15 @@ describe('candidate triage suggestions', () => {
     feedback.mockRejectedValue(new Error('Connection lost'));
     render(<TriageSuggestions workId="work" />);
     await ready();
-    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Right' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Connection lost');
-    expect(screen.getByRole('button', { name: 'Accept' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Right' })).toBeEnabled();
   });
   it('shows exposure payload errors and prevents feedback without acknowledged exposure', async () => {
     exposure.mockResolvedValue({ data: { triageSuggestionExposure: { success: false, message: 'No longer readable' } } });
     render(<TriageSuggestions workId="work" />);
     expect(await screen.findByRole('alert')).toHaveTextContent('No longer readable');
-    expect(screen.getByRole('button', { name: 'Accept' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Right' })).toBeDisabled();
     expect(feedback).not.toHaveBeenCalled();
   });
 });

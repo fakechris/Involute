@@ -237,7 +237,6 @@ const BANNED_WORDS: Array<[name: string, pattern: RegExp]> = [
 
 // Existing text that still breaks the rules; INV-2135 rewrites it and empties this list.
 const WORDING_ALLOWLIST = new Set<string>([
-  'components/NeedInfoControl.tsx: needinfo',
   'components/graph/DependencyGraph.tsx: BLOCKS',
   'routes/AutonomyTab.tsx: docs path',
   'routes/CandidatesPage.tsx: BLOCKS',
@@ -248,11 +247,7 @@ const WORDING_ALLOWLIST = new Set<string>([
   'routes/HygienePage.tsx: UPPER_SNAKE',
   'routes/HygienePage.tsx: run_report',
   'routes/InReviewPage.tsx: IQL',
-  'routes/InReviewPage.tsx: workReview',
   'routes/SearchPage.tsx: IQL',
-  'routes/WorkContextPage.tsx: (INV-n)',
-  'routes/WorkContextPage.tsx: kernel',
-  'routes/WorkContextPage.tsx: run_report',
 ]);
 
 const TEXT_ATTRIBUTES = new Set(['title', 'aria-label', 'aria-description', 'placeholder', 'hint', 'label', 'body', 'alt']);

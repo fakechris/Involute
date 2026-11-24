@@ -158,7 +158,7 @@ describe('autonomy settings pages (INV-1489)', () => {
     await expect(clearWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID }, 'x', admin.id)).rejects.toThrow(/edited, not cleared/);
   });
 
-  it('a Needs you row carries "Would be handled under L<n>" only while observing and only when the level would act', async () => {
+  it('a Needs you row carries "Automatic at autonomy level <n>" only while observing and only when the level would act', async () => {
     const { admin, team, project } = await fixture();
     const actor = writeActorFromViewer(admin, 'test');
     const bugLabel = await prisma.issueLabel.upsert({ where: { name: 'Bug' }, create: { name: 'Bug' }, update: {} });
@@ -169,7 +169,7 @@ describe('autonomy settings pages (INV-1489)', () => {
     expect(await observeLabelFor(prisma, row)).toBeNull();
     await setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: 2, reason: 'c' }, admin.id);
     await setWorkflowPolicy(prisma, { scope: 'TEAM', scopeId: team.id, level: 1, observeDays: 7, reason: 'try L1' }, admin.id);
-    expect(await observeLabelFor(prisma, row)).toMatch(/^Would be handled under L1: type bug/);
+    expect(await observeLabelFor(prisma, row)).toMatch(/^Automatic at autonomy level 1: type bug/);
     expect(await observeLabelFor(prisma, { kind: 'CANDIDATE_COMMIT', subjectId: feature.id, workId: feature.id })).toBeNull();
     expect(await observeLabelFor(prisma, { kind: 'WORK_REVIEW', subjectId: bug.id, workId: bug.id })).toBeNull();
     // Observing ends: the label goes, the decision was never taken by the policy.
