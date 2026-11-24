@@ -17,7 +17,8 @@ test.describe('manual journeys', () => {
 
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'All issues', exact: true })).toBeVisible();
-    await expect(page.getByTestId('column-Backlog')).toBeVisible();
+    // The board query also carries the delivery spec's fixtures; on CI it can take longer than the default 5s.
+    await expect(page.getByTestId('column-Backlog')).toBeVisible({ timeout: 30_000 });
     await page.locator('body').press('c');
     const createDrawer = page.getByRole('dialog', { name: 'Create issue drawer' });
     await expect(createDrawer).toBeVisible();
