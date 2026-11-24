@@ -381,7 +381,7 @@ export function CandidateCard({
   onPriorityChange?: (priority: number) => void;
 }) {
   const navigate = useNavigate();
-  const readOnly = candidate.team.viewerCanWrite === false;
+  const readOnly = candidate.viewerCanWrite === false;
   const [acceptance, setAcceptance] = useState(candidate.acceptance ?? '');
   // The whole contract can be settled at commit, not only acceptance (INV-792).
   const [contract, setContract] = useState({

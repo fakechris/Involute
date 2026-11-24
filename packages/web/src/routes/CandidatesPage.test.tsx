@@ -813,13 +813,13 @@ describe('CandidatesPage', () => {
 
 // INV-2159: a team Viewer reads a candidate card but cannot commit, decline or snooze it.
 describe('CandidatesPage for a team Viewer', () => {
-  const firstTeam = candidateItems[0]!.team as { id: string; key: string; viewerCanWrite?: boolean };
+  const first = candidateItems[0]! as { viewerCanWrite?: boolean };
   afterEach(() => {
-    delete firstTeam.viewerCanWrite;
+    delete first.viewerCanWrite;
   });
 
   it('makes the card read-only and says edit access is needed', () => {
-    firstTeam.viewerCanWrite = false;
+    first.viewerCanWrite = false;
     render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
     const card = screen.getByRole('article', { name: 'INV-40 candidate' });
     expect(within(card).getByRole('note')).toHaveTextContent(READ_ONLY_TEAM_MESSAGE);

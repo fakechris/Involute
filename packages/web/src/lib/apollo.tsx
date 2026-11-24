@@ -138,13 +138,13 @@ export function loadErrorMessage(error: unknown, fallback?: string, section?: st
   return fallback ?? (error instanceof Error ? error.message : undefined);
 }
 
-/** The server refused a change because the viewer may only read this team (docs/permissions.md). */
+/** The server refused a change because the viewer may only read this work (docs/permissions.md). */
 export function isForbiddenError(error: unknown): boolean {
   return CombinedGraphQLErrors.is(error) && error.errors.some(({ extensions }) => extensions?.code === 'FORBIDDEN');
 }
 
 /** What a person without edit access reads instead of "refresh and try again" (INV-2158..2161). */
-export const READ_ONLY_TEAM_MESSAGE = 'You can view this team but not change its work. Ask a team owner for edit access.';
+export const READ_ONLY_TEAM_MESSAGE = 'You can view this work but not change it. Ask a team owner for edit access.';
 
 /** The message for a failed change: no edit access, or the page's own fallback. */
 export function changeErrorMessage(error: unknown, fallback: string): string {

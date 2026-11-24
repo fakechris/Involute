@@ -490,10 +490,10 @@ describe('BugsPage for a team Viewer', () => {
   it('disables status and priority, hides Assign to me, and says why', () => {
     const query = vi.mocked(useQuery);
     const original = query.getMockImplementation()!;
-    const readOnly = { ...bugsPageData.teams.nodes[0]!, viewerCanWrite: false };
+    const issues = { ...bugsPageData.issues, nodes: bugsPageData.issues.nodes.map((issue) => ({ ...issue, viewerCanWrite: false })) };
     query.mockImplementation((document, options) => {
       const result = original(document, options);
-      return document === GRAPH_PROJECTS_QUERY ? result : ({ ...result, data: { ...bugsPageData, teams: { nodes: [readOnly] } } } as typeof result);
+      return document === GRAPH_PROJECTS_QUERY ? result : ({ ...result, data: { ...bugsPageData, issues } } as typeof result);
     });
     try {
       render(<MemoryRouter><BugsPage /></MemoryRouter>);

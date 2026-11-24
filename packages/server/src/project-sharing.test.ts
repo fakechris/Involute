@@ -189,6 +189,18 @@ describe('project sharing (INV-832)', () => {
       return response.json() as Promise<{ data: any; errors?: Array<{ message: string }> }>;
     }
 
+    it('tells the web per issue whether the viewer may change it: a team Viewer no, an editor share yes (INV-2158)', async () => {
+      const CAN_WRITE = `query($id: String!) { issue(id: $id) { viewerCanWrite } }`;
+      const canWrite = async (user: User, id: string) => (await graphql(user, CAN_WRITE, { id })).data.issue.viewerCanWrite as boolean;
+      await prisma.teamMembership.create({ data: { role: 'VIEWER', teamId: f.teamId, userId: f.outsider.id } });
+      expect(await canWrite(f.outsider, f.child.id)).toBe(false);
+      expect(await canWrite(f.admin, f.child.id)).toBe(true);
+
+      await upsertWorkShare(prisma, { actor: { actorId: f.admin.id, actorKind: 'HUMAN', surface: 'test' }, role: 'EDITOR', userId: f.outsider.id, workId: f.project.id });
+      expect(await canWrite(f.outsider, f.child.id)).toBe(true);
+      expect(await canWrite(f.outsider, f.other.id)).toBe(false);
+    });
+
     const UPSERT = `
       mutation Share($workId: String!, $userId: String!, $role: WorkShareRole!) {
         workShareUpsert(workId: $workId, userId: $userId, role: $role) {

@@ -97,11 +97,6 @@ export function BugsPage() {
       });
   }, [data?.issues.nodes]);
 
-  // A team Viewer sees the bugs but cannot change them in place (INV-2161).
-  const readOnlyTeamIds = useMemo(
-    () => new Set((data?.teams?.nodes ?? []).filter((team) => team.viewerCanWrite === false).map((team) => team.id)),
-    [data?.teams?.nodes],
-  );
   const statesByTeam = useMemo(
     () => new Map((data?.teams?.nodes ?? []).map((team) => [team.id, [...(team.states?.nodes ?? [])].sort((a, b) => a.position - b.position)])),
     [data?.teams?.nodes],
@@ -343,7 +338,7 @@ export function BugsPage() {
                 <p className="bugs-panel__empty">No open bug matches these filters.</p>
               ) : (
                 <>
-                {visibleBugs.some((issue) => readOnlyTeamIds.has(issue.team.id)) ? (
+                {visibleBugs.some((issue) => issue.viewerCanWrite === false) ? (
                   <p className="page-note" role="note">{READ_ONLY_TEAM_MESSAGE}</p>
                 ) : null}
                 <ul className="list-rows" aria-label="Open bugs list">
@@ -352,7 +347,7 @@ export function BugsPage() {
                       key={issue.id}
                       issue={issue}
                       states={statesByTeam.get(issue.team.id) ?? []}
-                      canWrite={!readOnlyTeamIds.has(issue.team.id)}
+                      canWrite={issue.viewerCanWrite !== false}
                       viewerId={viewerId}
                       focused={listKeys.focusedId === issue.id}
                       onRefresh={() => void refetch()}

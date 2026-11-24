@@ -319,13 +319,13 @@ describe('InReviewPage', () => {
 
 // INV-2158: a team Viewer reads the queue but cannot Accept or Return.
 describe('InReviewPage for a team Viewer', () => {
-  const firstTeam = reviewItems[0]!.team as { id: string; key: string; viewerCanWrite?: boolean };
+  const first = reviewItems[0]! as { viewerCanWrite?: boolean };
   afterEach(() => {
-    delete firstTeam.viewerCanWrite;
+    delete first.viewerCanWrite;
   });
 
   it('shows no Accept, Return or selection on work the viewer may only read, and says why', () => {
-    firstTeam.viewerCanWrite = false;
+    first.viewerCanWrite = false;
     render(<MemoryRouter><InReviewPage /></MemoryRouter>);
     const readOnly = screen.getByRole('listitem', { name: 'INV-101 in review' });
     expect(within(readOnly).queryByRole('button', { name: 'Accept' })).toBeNull();

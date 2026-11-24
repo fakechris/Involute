@@ -34,10 +34,10 @@ export const CANDIDATE_WORK_FIELDS = gql`
       kind
     }
     dependencyHints
+    viewerCanWrite
     team {
       id
       key
-      viewerCanWrite
     }
     assignee {
       id
@@ -153,10 +153,10 @@ export const IN_REVIEW_PAGE_QUERY = gql`
           overdue
         }
         createdAt
+        viewerCanWrite
         team {
           id
           key
-          viewerCanWrite
         }
         assignee {
           id

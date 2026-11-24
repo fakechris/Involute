@@ -33,7 +33,7 @@ const ITEM_REJECT_ERROR = 'This work could not be returned. Refresh and try agai
 
 /** A team Viewer reads the queue but cannot decide it (docs/permissions.md, INV-2158). */
 function canReview(item: InReviewWork): boolean {
-  return !item.deliveryRootId && item.team.viewerCanWrite !== false;
+  return !item.deliveryRootId && item.viewerCanWrite !== false;
 }
 
 function readStoredIql(): string {
@@ -462,7 +462,7 @@ export function InReviewPage() {
                   </dl>
                   {itemErrors[item.id] ? <InlineError>{itemErrors[item.id]}</InlineError> : null}
                   <div className="observation-card__actions">
-                    {item.deliveryRootId ? <Btn variant="accent" onClick={() => navigate(`/work/${item.deliveryRootId}`)}>Review delivery package</Btn> : item.team.viewerCanWrite === false ? (
+                    {item.deliveryRootId ? <Btn variant="accent" onClick={() => navigate(`/work/${item.deliveryRootId}`)}>Review delivery package</Btn> : item.viewerCanWrite === false ? (
                       <p className="page-note" role="note">{READ_ONLY_TEAM_MESSAGE}</p>
                     ) : <>
                     <Btn

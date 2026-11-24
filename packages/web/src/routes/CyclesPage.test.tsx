@@ -240,11 +240,15 @@ describe('CyclesPage access and load failures', () => {
     return () => query.mockImplementation(original);
   }
 
-  it('hides Edit, Delete and Configure from a team Viewer and says why (INV-2160)', () => {
+  it('hides Edit, Delete and Configure on milestones the viewer may only read, and says why (INV-2160)', () => {
     const restore = withQuery((docStr, result) => {
-      if (!docStr.includes('BoardPage')) return result;
-      const data = result.data as { teams: { nodes: Array<Record<string, unknown>> } };
-      return { ...result, data: { teams: { nodes: data.teams.nodes.map((team) => ({ ...team, viewerCanWrite: false })) } } } as typeof result;
+      if (docStr.includes('BoardPage')) {
+        const data = result.data as { teams: { nodes: Array<Record<string, unknown>> } };
+        return { ...result, data: { teams: { nodes: data.teams.nodes.map((team) => ({ ...team, viewerCanWrite: false })) } } } as typeof result;
+      }
+      if (!docStr.includes('MilestoneIssues')) return result;
+      const data = result.data as { issues: { nodes: Array<Record<string, unknown>> } };
+      return { ...result, data: { issues: { nodes: data.issues.nodes.map((milestone) => ({ ...milestone, viewerCanWrite: false })) } } } as typeof result;
     });
     try {
       render(<MemoryRouter><CyclesPage /></MemoryRouter>);

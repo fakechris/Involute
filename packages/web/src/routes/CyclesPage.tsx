@@ -406,7 +406,7 @@ export function CyclesPage() {
           ) : (
             <>
               {milestoneListError ? <InlineError>{milestoneListError}</InlineError> : null}
-              {!canWriteTeam && selectedTeam ? <p className="page-note" role="note">{READ_ONLY_TEAM_MESSAGE}</p> : null}
+              {milestones.some((milestone) => milestone.viewerCanWrite === false) ? <p className="page-note" role="note">{READ_ONLY_TEAM_MESSAGE}</p> : null}
               {activeMilestones.length > 0 && (
                 <section className="cycles-section">
                   <h2 className="cycles-section__title">In progress</h2>
@@ -418,7 +418,7 @@ export function CyclesPage() {
                         <Btn variant="ghost" size="sm" onClick={() => navigate(`/work/${milestone.id}`)}>
                           Work context
                         </Btn>
-                        {canWriteTeam ? (
+                        {milestone.viewerCanWrite !== false ? (
                           <Btn variant="ghost" icon={<IcoSettings size={12} />} size="sm" onClick={() => openEditMilestone(milestone)}>
                             Configure
                           </Btn>
@@ -440,7 +440,7 @@ export function CyclesPage() {
                       milestone={milestone}
                       onEdit={() => openEditMilestone(milestone)}
                       onDelete={() => void handleMilestoneDelete(milestone.id)}
-                      canEdit={canWriteTeam}
+                      canEdit={milestone.viewerCanWrite !== false}
                       onNavigate={() => navigate(`/work/${milestone.id}`)}
                     />
                   ))}
@@ -456,7 +456,7 @@ export function CyclesPage() {
                       milestone={milestone}
                       onEdit={() => openEditMilestone(milestone)}
                       onDelete={() => void handleMilestoneDelete(milestone.id)}
-                      canEdit={canWriteTeam}
+                      canEdit={milestone.viewerCanWrite !== false}
                       onNavigate={() => navigate(`/work/${milestone.id}`)}
                     />
                   ))}
@@ -634,7 +634,7 @@ function MilestoneRow({
   onNavigate,
 }: {
   milestone: MilestoneIssueSummary;
-  /** False for a team Viewer: no Edit or Delete (INV-2160). */
+  /** False when the viewer may only read this milestone: no Edit or Delete (INV-2160). */
   canEdit: boolean;
   onEdit: () => void;
   onDelete: () => void;

@@ -153,6 +153,8 @@ export interface FieldDefinitionSummary {
 export interface IssueSummary {
   id: string;
   identifier: string;
+  /** False when the viewer may only read this issue (a team Viewer); only some lists ask for it. */
+  viewerCanWrite?: boolean;
   /** Latest Auto-Accept Gate evaluation (INV-1075); only the issue page asks for it. */
   autoAccept?: { outcome: string; reasons: string[]; accepted: boolean; createdAt: string } | null;
   /** Rounds of work on a clock (INV-1582); null when the item has no schedule. */
@@ -950,6 +952,8 @@ export interface WorkLinkDeleteMutationVariables {
 export interface MilestoneIssueSummary {
   id: string;
   identifier: string;
+  /** False when the viewer may only read this milestone: no Edit or Delete (INV-2160). */
+  viewerCanWrite?: boolean;
   title: string;
   description?: string | null;
   outcome?: string | null;
