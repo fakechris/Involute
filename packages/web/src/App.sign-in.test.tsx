@@ -106,6 +106,28 @@ describe('expired session query failures', () => {
     expect(screen.queryByText(/Not authenticated|Delivery changes could not be loaded/i)).not.toBeInTheDocument();
   });
 
+  it('clears the session-ended notice when the tab comes back after signing in again (INV-2146)', async () => {
+    window.history.replaceState(null, '', '/candidates');
+    let signedIn = false;
+    vi.stubGlobal('fetch', vi.fn(async (req: string, init?: RequestInit) => {
+      if (req.endsWith('/auth/session')) return Response.json({
+        authMode: 'session', authenticated: true,
+        viewer: { id: 'viewer-1', email: 'viewer@example.test', name: 'Viewer', globalRole: 'USER' },
+        authProviders: [{ id: 'google', startUrl: '/auth/google/start', label: 'Sign in with Google' }], googleOAuthConfigured: true,
+      });
+      void init;
+      return signedIn ? Response.json({ data: null }) : graphqlAuthError();
+    }));
+    render(<AppApolloProvider><BrowserRouter><RevisitRefresh /><App /></BrowserRouter></AppApolloProvider>);
+    expect(await screen.findByText('Your session ended. Copy any unsaved text before you sign in.')).toBeVisible();
+
+    // Signed in again elsewhere; this tab finds out when it gets focus back.
+    signedIn = true;
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(screen.queryByText(/Your session ended/)).not.toBeInTheDocument());
+    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeVisible();
+  });
+
   it('removes stale signed-in controls when a query reports an expired session', async () => {
     window.history.replaceState(null, '', '/candidates');
     let finishRequest!: () => void;

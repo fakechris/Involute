@@ -2,7 +2,7 @@ import { gql } from '@apollo/client';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { loadErrorMessage } from '../lib/apollo';
+import { loadErrorMessage, useAuthenticationFailure } from '../lib/apollo';
 import { Select } from './controls';
 const CONTEXT = gql`query ExecutorPanel($id: String!) { executorContextJson(id: $id) }`;
 const UPDATE = gql`mutation ExecutorAction($workId: String!, $operation: String!, $detailsJson: String) { executorUpdate(workId: $workId, operation: $operation, detailsJson: $detailsJson) { success message resultJson } }`;
@@ -11,7 +11,9 @@ type Effect = { id: string; generation: number; action: string; environment: str
 type Dispatch = { id: string; workId: string; revision: number; generation: number; visibleState: string; executorActorId: string; checkpoint: string | null; feedback: string | null; receipts: Receipt[]; effects?: Effect[] };
 type Context = { protocolVersion: number; viewerCanWrite: boolean; viewerCanReconcile?: boolean; dispatches: Dispatch[] };
 export function ExecutorPanel({ workId, canDispatch = false }: { workId: string; canDispatch?: boolean }) {
-  const { data, error, refetch } = useQuery<{ executorContextJson: string }>(CONTEXT, { variables: { id: workId }, pollInterval: 5000 });
+  // No polling while the session has ended (INV-2146): every request would be refused.
+  const sessionEnded = useAuthenticationFailure();
+  const { data, error, refetch } = useQuery<{ executorContextJson: string }>(CONTEXT, { variables: { id: workId }, pollInterval: sessionEnded ? 0 : 5000 });
   const [update, { loading }] = useMutation<{ executorUpdate: { success: boolean; message: string | null } }>(UPDATE);
   const [message, setMessage] = useState('');
   const [resolutions, setResolutions] = useState<Record<string, { outcome: string; reason: string; evidenceUrl: string; observedSha: string }>>({});

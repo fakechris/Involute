@@ -8,7 +8,7 @@ import { CombinedGraphQLErrors, ServerError } from '@apollo/client/errors';
 import { setContext } from '@apollo/client/link/context';
 import { ErrorLink } from '@apollo/client/link/error';
 import type { PropsWithChildren } from 'react';
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { VIEWER_ASSERTION_HEADER } from '@turnkeyai/involute-shared';
 import { readLocalStorageValue } from './storage';
 
@@ -260,6 +260,34 @@ export function useAuthenticationFailure(): boolean {
 export function AppApolloProvider({ children }: PropsWithChildren) {
   const [authenticationFailed, setAuthenticationFailed] = useState(false);
   const client = useMemo(() => createApolloClient(() => setAuthenticationFailed(true)), []);
+  // After a sign-in (in this tab or another), coming back to this tab clears the
+  // session-ended state and reloads what is on screen, without a page reload (INV-2146).
+  useEffect(() => {
+    if (!authenticationFailed) return;
+    let checking = false;
+    async function checkSession() {
+      if (checking || document.visibilityState === 'hidden') return;
+      checking = true;
+      try {
+        const response = await fetch(`${getServerBaseUrl()}/auth/session`, { credentials: 'include' });
+        const session = response.ok ? ((await response.json()) as { authenticated?: boolean }) : null;
+        if (session?.authenticated) {
+          setAuthenticationFailed(false);
+          void client.refetchQueries({ include: 'active' }).catch(() => undefined);
+        }
+      } catch {
+        // Still signed out, or offline: try again on the next return to the tab.
+      } finally {
+        checking = false;
+      }
+    }
+    window.addEventListener('focus', checkSession);
+    document.addEventListener('visibilitychange', checkSession);
+    return () => {
+      window.removeEventListener('focus', checkSession);
+      document.removeEventListener('visibilitychange', checkSession);
+    };
+  }, [authenticationFailed, client]);
 
   return (
     <ApolloProvider client={client}>

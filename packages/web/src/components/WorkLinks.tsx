@@ -3,7 +3,7 @@ import { useQuery } from '@apollo/client/react';
 
 import { isRenderableImageUrl } from '@turnkeyai/involute-shared';
 
-import { loadErrorMessage } from '../lib/apollo';
+import { loadErrorMessage, useAuthenticationFailure } from '../lib/apollo';
 import type { PullRequestLink } from '../board/types';
 import type { WorkEvidenceSummary } from '../work/types';
 import { extraImageHosts } from '../image-hosts';
@@ -96,7 +96,9 @@ function Href({ url, children }: { url: string; children: React.ReactNode }) {
 
 export function WorkLinks({ workId }: { workId: string }) {
   // GitHub adds evidence while the page is open (INV-1703): read again every minute and on every visit.
-  const { data, error } = useQuery<WorkLinksData, { id: string }>(WORK_LINKS_QUERY, { variables: { id: workId }, fetchPolicy: 'cache-and-network', pollInterval: 60_000 });
+  // Not while the session has ended (INV-2146): the poll would only be refused.
+  const sessionEnded = useAuthenticationFailure();
+  const { data, error } = useQuery<WorkLinksData, { id: string }>(WORK_LINKS_QUERY, { variables: { id: workId }, fetchPolicy: 'cache-and-network', pollInterval: sessionEnded ? 0 : 60_000 });
   if (error) return <p role="alert">{loadErrorMessage(error, `Commits and links could not be loaded: ${error.message}`)}</p>;
   const context = data?.workContext;
   if (!context) return null;

@@ -4,6 +4,13 @@
 #   sudo bash scripts/db-backup-daily.sh            # take, verify and prune
 #   sudo bash scripts/db-backup-daily.sh install    # install the daily systemd timer
 #
+# Install from a file on the box, never through stdin (INV-2152): with
+# `bash -s install < db-backup-daily.sh` the script cannot find itself, and
+# could copy whatever file called "bash" sits in the current directory.
+#   scp scripts/db-backup-daily.sh oracle_5:/tmp/ && ssh oracle_5 'sudo bash /tmp/db-backup-daily.sh install'
+#
+# involute-db-backup-script (marker: the installer checks it copies this file)
+#
 # Each run:
 #   1. pg_dump -Fc from the db container into a temp file;
 #   2. verifies it: pg_restore --list must read it and list table data, and the
@@ -26,7 +33,12 @@ log() { echo "db-backup: $*"; }
 fail() { echo "db-backup: FAILED: $*" >&2; exit 1; }
 
 if [[ "${1:-}" == "install" ]]; then
-  script="$(readlink -f "$0")"
+  # The file being run, not $0: under `bash -s` that is just "bash" (INV-2152).
+  script="${BASH_SOURCE[0]:-}"
+  if [[ -z "$script" || ! -f "$script" ]] || ! grep -q '^# involute-db-backup-script' "$script"; then
+    fail "install must run from the script file, not from stdin. Copy it to the box and run it by path: scp scripts/db-backup-daily.sh oracle_5:/tmp/ && ssh oracle_5 'sudo bash /tmp/db-backup-daily.sh install'"
+  fi
+  script="$(readlink -f "$script")"
   install -m 0755 "$script" /usr/local/sbin/involute-db-backup
   cat > /etc/systemd/system/involute-db-backup.service <<EOF
 [Unit]

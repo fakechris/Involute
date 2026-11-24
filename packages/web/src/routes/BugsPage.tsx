@@ -71,7 +71,11 @@ export function BugsPage() {
   );
 
   const summary = data?.bugSummary ?? null;
-  const reportTeam = data?.teams?.nodes.find((team) => team.key === teamKey) ?? data?.teams?.nodes[0];
+  // The chosen team, else the first one this person can write to (INV-2148): a
+  // read-only first team must not hide Report bug when another team allows it.
+  const reportTeam = data?.teams?.nodes.find((team) => team.key === teamKey)
+    ?? data?.teams?.nodes.find((team) => team.viewerCanWrite)
+    ?? data?.teams?.nodes[0];
   const { data: reportProjectData, loading: reportProjectsLoading } = useQuery<GraphProjectsQueryData>(GRAPH_PROJECTS_QUERY, {
     variables: { teamFilter: { key: { eq: reportTeam?.key } } },
     skip: !reportTeam?.viewerCanWrite,
@@ -146,8 +150,9 @@ export function BugsPage() {
         icon={<IcoBug size={14} />}
         title="Bugs"
         count={summary?.openCount ?? 0}
-        actions={reportTeam?.viewerCanWrite ? (
-          <Btn variant="accent" disabled={reportProjectsLoading && !reportProjectData} onClick={() => setIsReportBugOpen(true)}>
+        actions={!data || reportTeam?.viewerCanWrite ? (
+          // Shown while the page loads, disabled until it knows which team the bug goes to.
+          <Btn variant="accent" disabled={!data || (reportProjectsLoading && !reportProjectData)} onClick={() => setIsReportBugOpen(true)}>
             Report bug
           </Btn>
         ) : null}
