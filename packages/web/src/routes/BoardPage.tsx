@@ -123,7 +123,7 @@ import {
 } from '../board/views';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import type { ContractValues } from '../components/ContractSection';
-import { getBoardBootstrapErrorMessage } from '../lib/apollo';
+import { getBoardBootstrapErrorMessage, isAuthenticationError } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
 import { SAVED_VIEWS_ACCOUNT_EVENT } from '../lib/saved-views-account';
 import { BoardCreateIssueDialog, DECISION_TEMPLATE, type CreatableKind } from '../components/BoardCreateIssueDialog';
@@ -2960,7 +2960,7 @@ export function BoardPage() {
   // A bad neighbourhood id is an IQL error. Keep the filter bar so it can be
   // edited or cleared, instead of replacing the board with "Board unavailable".
   const iqlError = iqlParseMessage(error);
-  if (error && !iqlError) {
+  if (error && !iqlError && !(queryData && isAuthenticationError(error))) {
     const errorState = getBoardBootstrapErrorMessage(error);
 
     return (

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 import { AppApolloProvider } from './lib/apollo';
+import { FOCUS_REFETCH_MIN_INTERVAL_MS, RevisitRefresh } from './lib/revisit-refresh';
 import { readSignInReturn } from './lib/session';
 
 vi.mock('./routes/IssuePage', async () => {
@@ -37,7 +38,7 @@ function renderApp(session: 'signed-out' | 'signed-in', graphql: (operation: str
     }, { status: session === 'signed-in' ? 200 : 401 })
     : graphql(JSON.parse(String(init?.body ?? '{}')).operationName ?? ''))));
 
-  return render(<AppApolloProvider><BrowserRouter><App /></BrowserRouter></AppApolloProvider>);
+  return render(<AppApolloProvider><BrowserRouter><RevisitRefresh /><App /></BrowserRouter></AppApolloProvider>);
 }
 
 const graphqlAuthError = () => Response.json({ errors: [{ message: 'Not authenticated' }] });
@@ -119,6 +120,40 @@ describe('expired session query failures', () => {
     expect(screen.getByRole('dialog', { name: 'Edit issue' })).toBe(dialog);
     expect(draft).toHaveValue('Unsaved description');
     expect(draft).toHaveFocus();
+  });
+
+  it('keeps a Board bug draft when tab return discovers expiry and skips later refreshes', async () => {
+    window.history.replaceState(null, '', '/?team=INV');
+    let expired = false;
+    const board = vi.fn(() => expired ? httpAuthError() : Response.json({
+      data: {
+        teams: { nodes: [{
+          id: 'team-1', key: 'INV', name: 'Involute', viewerCanWrite: true, viewerCanManage: true, issueCount: 0,
+          memberships: { nodes: [] }, states: { nodes: [] },
+        }] },
+        projectSummary: { totalCount: 0, noRepositoryCount: 0, projects: [], projectsWithoutRepository: [] },
+        users: { nodes: [] }, issueLabels: { nodes: [] }, issueStateCounts: [],
+        issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+      },
+    }));
+    renderApp('signed-in', (operation) => operation === 'BoardPage' ? board() : Response.json({ data: null }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Report bug' }));
+    const dialog = screen.getByRole('dialog', { name: 'Report bug drawer' });
+    const draft = within(dialog).getByRole('textbox', { name: 'Bug title' });
+    fireEvent.change(draft, { target: { value: 'Unsaved bug title' } });
+    const initialRequests = board.mock.calls.length;
+    expired = true;
+    fireEvent.focus(window);
+
+    await screen.findByText('Your session ended. Copy any unsaved text before you sign in.');
+    expect(board).toHaveBeenCalledTimes(initialRequests + 1);
+    expect(screen.getByRole('dialog', { name: 'Report bug drawer' })).toBe(dialog);
+    expect(draft).toHaveValue('Unsaved bug title');
+
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + FOCUS_REFETCH_MIN_INTERVAL_MS);
+    fireEvent.focus(window);
+    expect(board).toHaveBeenCalledTimes(initialRequests + 1);
   });
 
   it('leaves a 500 as a retryable error', async () => {

@@ -2,6 +2,8 @@ import { useApolloClient } from '@apollo/client/react';
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 
+import { useAuthenticationFailure } from './apollo';
+
 /** Returning to a visible tab refetches at most this often. */
 export const FOCUS_REFETCH_MIN_INTERVAL_MS = 10_000;
 
@@ -45,16 +47,18 @@ export function createRevisitRefresher(refetch: () => void, now: () => number = 
 export function RevisitRefresh() {
   const client = useApolloClient();
   const location = useLocation();
+  const authenticationFailed = useAuthenticationFailure();
   const refresher = useRef<RevisitRefresher | null>(null);
   refresher.current ??= createRevisitRefresher(() => {
     void client.refetchQueries({ include: 'active' }).catch(() => undefined);
   });
 
   useEffect(() => {
-    refresher.current?.onNavigate({ key: location.key, pathname: location.pathname });
-  }, [location.key, location.pathname]);
+    if (!authenticationFailed) refresher.current?.onNavigate({ key: location.key, pathname: location.pathname });
+  }, [authenticationFailed, location.key, location.pathname]);
 
   useEffect(() => {
+    if (authenticationFailed) return;
     const onVisibility = () => {
       if (document.visibilityState === 'visible') refresher.current?.onReturn();
     };
@@ -65,7 +69,7 @@ export function RevisitRefresh() {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', onFocus);
     };
-  }, []);
+  }, [authenticationFailed]);
 
   return null;
 }
