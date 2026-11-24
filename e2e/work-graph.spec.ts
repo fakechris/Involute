@@ -281,8 +281,8 @@ test.describe('work graph acceptance', () => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto('/hygiene');
-    await expect(page.getByRole('heading', { name: 'Work graph health' })).toBeVisible();
-    for (const section of ['Not in any project tree', 'Dependencies without BLOCKS', 'Research with nothing derived', 'Mentions without a link']) {
+    await expect(page.getByRole('heading', { name: 'Work health' })).toBeVisible();
+    for (const section of ['Not in any project tree', 'Dependencies not linked as blocking', 'Research with nothing derived', 'Mentions without a link']) {
       await expect(page.getByRole('region', { name: section })).toBeVisible();
     }
     expect(errors).toEqual([]);

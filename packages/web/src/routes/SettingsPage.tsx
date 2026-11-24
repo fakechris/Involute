@@ -255,7 +255,7 @@ function PreferencesTab() {
           ]}
         />
       </SettingRow>
-      <SettingRow label="Email notifications" hint="Also send inbox notifications to your email address.">
+      <SettingRow label="Email notifications" hint="Also email you what appears in Activity.">
         <EmailNotificationsField />
       </SettingRow>
       <SettingRow label="Keyboard shortcuts" hint="Single-key shortcuts such as C (create) and G then B (go to Board). Off: these keys do nothing outside text fields.">

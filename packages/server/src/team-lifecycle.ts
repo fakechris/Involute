@@ -117,7 +117,7 @@ export async function setTeamArchived(prisma: PrismaClient, teamId: string, arch
   return prisma.team.update({ where: { id: teamId }, data: { archivedAt: archived ? new Date() : null } });
 }
 
-/** A workspace member joins a public, active team as a team Member (EDITOR). */
+/** A workspace member joins a public, active team as a team Editor (EDITOR). */
 export async function joinTeam(prisma: PrismaClient, input: { teamId: string; user: TeamCreator }): Promise<void> {
   const team = await prisma.team.findUnique({ where: { id: input.teamId } });
   if (!team) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);

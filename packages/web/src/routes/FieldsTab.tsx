@@ -287,7 +287,7 @@ function FieldForm({
     <fieldset className="settings-fieldset" aria-label="Field form">
       <legend className="field__label">{editing ? `Edit ${draft.key}` : 'New field'}</legend>
       <div className="form-stack">
-        <Field label="Key" hint="snake_case; how agents and IQL name it. Rename it later with a reason." layout="aside">
+        <Field label="Key" hint="Lowercase letters, digits and underscores. Agents and filter queries use this name. You can rename it later with a reason." layout="aside">
           <TextInput aria-label="Field key" value={draft.key} disabled={editing} onChange={(event) => set({ key: event.target.value })} placeholder="customer_tier" />
         </Field>
         <Field label="Label" layout="aside">

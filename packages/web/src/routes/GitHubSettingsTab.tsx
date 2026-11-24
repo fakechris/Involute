@@ -97,7 +97,7 @@ export function GitHubSettingsTab({
         <h3>1. The deployment&apos;s GitHub App</h3>
         {!setup.secretKeyConfigured ? (
           <p role="alert">
-            The server has no INVOLUTE_SECRET_KEY, so it cannot store GitHub credentials. An operator sets it once in the server environment (any long random string) and restarts; see docs/github-connection.md.
+            The server cannot store GitHub credentials yet. Ask the person who runs the server to set its secret key and restart it.
           </p>
         ) : setup.app ? (
           <dl className="github-setup__facts">
@@ -105,7 +105,7 @@ export function GitHubSettingsTab({
             <dd>
               <a href={setup.app.htmlUrl} target="_blank" rel="noreferrer">{setup.app.name}</a> · owned by {setup.app.ownerLogin || 'unknown'}
             </dd>
-            <dt>Events</dt>
+            <dt>Webhook URL</dt>
             <dd className="mono">{setup.webhookUrl}</dd>
             <dt>Last delivery</dt>
             <dd>{setup.lastDeliveryAt ? new Date(setup.lastDeliveryAt).toLocaleString() : 'none yet — GitHub sends events once a team installs the App'}</dd>
@@ -310,7 +310,7 @@ function ConnectionRow({ connection, canManage, teamId, onChanged }: { connectio
         <span className={connection.status === 'ACTIVE' ? 'observation-card__meta' : 'github-setup__bad'}>{connection.status === 'ACTIVE' ? 'connected' : 'disconnected'}</span>
         {connection.lastError ? <span className="github-setup__bad">{connection.lastError}</span> : null}
         <Btn size="sm" variant="subtle" onClick={() => void loadRepositories({ variables: { connectionId: connection.id } })}>Repositories</Btn>
-        {canManage ? <Btn size="sm" variant="danger" onClick={() => void disconnect()} disabled={removing.loading}>Disconnect</Btn> : null}
+        {canManage ? <Btn size="sm" variant="danger" onClick={() => void disconnect()} disabled={removing.loading}>Remove connection</Btn> : null}
       </div>
       {repositories.error ? <p role="alert">{repositories.error.message}</p> : null}
       {repositories.data ? (

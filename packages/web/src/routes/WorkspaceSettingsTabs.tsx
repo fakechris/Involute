@@ -377,7 +377,7 @@ export function EmailNotificationsField() {
   return (
     <div>
       <Checkbox
-          label={enabled ? 'Email me inbox notifications' : 'Inbox only'}
+          label={enabled ? 'Email me my Activity' : 'Activity only'}
           aria-label="Email notifications"
           checked={enabled}
           disabled={loading && !data}

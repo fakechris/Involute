@@ -31,7 +31,7 @@ const ALLOWED_LABEL: Array<[keyof AgentTrustView['allowed'], string]> = [
   ['claimWork', 'claim work'],
   ['fileBugs', 'file bugs'],
   ['autoCommit', 'have qualifying candidates committed'],
-  ['autoAccept', 'have CLEAR deliveries accepted'],
+  ['autoAccept', 'have deliveries with clear evidence accepted'],
   ['delegate', 'delegate to other agents'],
 ];
 

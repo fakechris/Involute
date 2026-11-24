@@ -82,7 +82,7 @@ describe('Settings → GitHub (INV-1677)', () => {
 
   it('says what the operator must set when the server cannot store secrets', async () => {
     renderTab([setup({ secretKeyConfigured: false })]);
-    expect(await screen.findByText(/no INVOLUTE_SECRET_KEY/)).toBeInTheDocument();
+    expect(await screen.findByText(/cannot store GitHub credentials yet/)).toBeInTheDocument();
   });
 
   it('posts the manifest as a form, the way GitHub requires', () => {
@@ -153,7 +153,7 @@ describe('Settings → GitHub (INV-1677)', () => {
       setup({ viewerCanCreateApp: false, app, teams: [team()] }),
     ]);
     expect(await screen.findByText('GitHub App · all repositories')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Disconnect'));
+    fireEvent.click(screen.getByText('Remove connection'));
     expect(await screen.findByText('Not connected to GitHub.')).toBeInTheDocument();
     vi.restoreAllMocks();
   });
