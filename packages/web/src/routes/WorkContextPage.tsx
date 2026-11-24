@@ -122,7 +122,7 @@ export function WorkContextPage() {
           <div role="alert">
             <EmptyState
               title="Could not load work context"
-              body="The kernel request failed; this is not being reported as a missing work item."
+              body="The page did not load. The item may still exist. Try again."
               action={<Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>}
             />
           </div>
@@ -136,7 +136,7 @@ export function WorkContextPage() {
       <div className="observation-page">
         <PageHeader title="Work context" />
         <PageBody width="default">
-          <EmptyState title="Work not found" body="Context is loaded from the kernel by identifier or UUID." />
+          <EmptyState title="Work not found" body="Check the identifier, for example INV-123." />
         </PageBody>
       </div>
     );
@@ -167,7 +167,7 @@ export function WorkContextPage() {
         )}
         actions={(
           <Btn variant="subtle" onClick={() => navigate(`/issue/${work.id}`)}>
-            Issue editor
+            Open issue page
           </Btn>
         )}
       />
@@ -211,7 +211,7 @@ export function WorkContextPage() {
             <ContractField label="Owner" value={work.assignee?.name ?? work.assignee?.email} />
           </dl>
         </section>
-        <RelatedList label="Contains ancestors" items={bundle.ancestors} onOpen={(workId) => navigate(`/work/${workId}`)} />
+        <RelatedList label="Parents" items={bundle.ancestors} onOpen={(workId) => navigate(`/work/${workId}`)} />
         <RelatedList label="Blocked by" items={bundle.blockedBy} onOpen={(workId) => navigate(`/work/${workId}`)} />
         <RelatedList label="Blocks" items={bundle.blocks} onOpen={(workId) => navigate(`/work/${workId}`)} />
         <section className="work-context__section">
@@ -233,9 +233,9 @@ export function WorkContextPage() {
                 <li key={run.id}>
                   <strong className="mono">{run.publicId}</strong>
                   <span>{run.status.toLowerCase()}</span>
-                  {run.scheduleRound ? <span className="mono" title="A round of this item's schedule (INV-1582)">round {run.scheduleRound}</span> : null}
+                  {run.scheduleRound ? <span className="mono" title="A scheduled run of this item">scheduled run {run.scheduleRound}</span> : null}
                   {run.presence === 'stale' ? (
-                    <span className="work-context__stale" title="No run_report, evidence or comment from the executor for over the stale threshold">stale</span>
+                    <span className="work-context__stale" title="No report, evidence or comment from the agent for a long time">stale</span>
                   ) : null}
                   {run.status === 'RUNNING' && run.lastActivityAt ? (
                     <span className="observation-card__meta">last activity {formatWhen(run.lastActivityAt)}</span>

@@ -155,8 +155,8 @@ describe('Needs you (INV-1092)', () => {
     expect(screen.getByText('5 waiting on your decision')).toBeInTheDocument();
     // Contract changes come before finished work, then candidates.
     const sections = screen.getAllByRole('region').filter((region) => region.className.includes('attention-section'));
-    expect(sections.map((section) => section.getAttribute('aria-label'))).toEqual(['Contract changes', 'Accept work', 'Commit candidates']);
-    const candidates = screen.getByRole('region', { name: 'Commit candidates' });
+    expect(sections.map((section) => section.getAttribute('aria-label'))).toEqual(['Contract changes to approve', 'Finished work to review', 'Candidates to commit or decline']);
+    const candidates = screen.getByRole('region', { name: 'Candidates to commit or decline' });
     expect(within(candidates).getByText('3')).toBeInTheDocument();
     expect(within(candidates).getByText('oldest 5h')).toBeInTheDocument();
     const group = candidates.querySelector('.attention-group__label');
@@ -166,7 +166,7 @@ describe('Needs you (INV-1092)', () => {
     // The first item's decision is open on the right: the contract change, with its diff and buttons.
     const decision = screen.getByLabelText('Decision');
     expect(within(decision).getByText('The rule changed.')).toBeInTheDocument();
-    expect(within(decision).getByRole('button', { name: /Accept change/ })).toBeInTheDocument();
+    expect(within(decision).getByRole('button', { name: /Approve change/ })).toBeInTheDocument();
   });
 
   it('renders a milestone, epic or project group as a collapsible parent container with nested child items (INV-1302)', () => {
@@ -213,13 +213,13 @@ describe('Needs you (INV-1092)', () => {
 
   it('shows what an observed level would have done as a grey chip, and nothing when the server sends none (INV-1489)', () => {
     nodes = [
-      node('CANDIDATE_COMMIT', 'w-1', work('w-1', 'INV-11'), '2026-10-09T10:00:00.000Z', { wouldBeAutomatic: 'Would be handled under L1: type bug, priority 2' }),
+      node('CANDIDATE_COMMIT', 'w-1', work('w-1', 'INV-11'), '2026-10-09T10:00:00.000Z', { wouldBeAutomatic: 'Automatic at autonomy level 1: type bug, priority 2' }),
       node('CANDIDATE_COMMIT', 'w-2', work('w-2', 'INV-12'), '2026-10-09T11:00:00.000Z', { wouldBeAutomatic: null }),
     ];
     total = 2;
     render(<MemoryRouter><AttentionPage /></MemoryRouter>);
-    expect(screen.getByText('Would be handled under L1: type bug, priority 2')).toBeInTheDocument();
-    expect(screen.getAllByText(/Would be handled/)).toHaveLength(1);
+    expect(screen.getByText('Automatic at autonomy level 1: type bug, priority 2')).toBeInTheDocument();
+    expect(screen.getAllByText(/Automatic at autonomy level/)).toHaveLength(1);
   });
 
   it('lists Handled for you with why, returns an auto-committed item to candidates and an auto-accepted amendment to the person (INV-1491)', async () => {
@@ -238,7 +238,7 @@ describe('Needs you (INV-1092)', () => {
     const group = screen.getByRole('group', { name: 'Handled for you' });
     expect(within(group).getByText(/Handled for you \(4\)/)).toBeInTheDocument();
     expect(within(group).getByText(/Why: candidate_commit by team policy v2/)).toBeInTheDocument();
-    expect(within(group).getByText('Returned')).toBeInTheDocument();
+    expect(within(group).getByText('Undone')).toBeInTheDocument();
     fireEvent.click(within(group).getByRole('button', { name: 'Return to candidates' }));
     await waitFor(() => expect(mutation('WorkUncommit')).toHaveBeenCalledWith({ variables: { id: 'w-20', expectedRevision: 3 } }));
     expect(await within(group).findByText(/counted as an override/)).toBeInTheDocument();
@@ -317,7 +317,7 @@ describe('Needs you (INV-1092)', () => {
       .mockResolvedValueOnce({ data: { workCommit: { issue: { id: 'c-3', identifier: 'INV-43', revision: 2 }, success: true } } });
     renderPage();
     for (const id of ['INV-41', 'INV-42', 'INV-43']) fireEvent.click(screen.getByLabelText(`Select ${id}`));
-    fireEvent.click(screen.getByRole('button', { name: 'Accept or commit 3' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Accept, commit or approve 3' }));
 
     await waitFor(() => expect(mutations.WorkCommit).toHaveBeenCalledTimes(3));
     const results = await screen.findByRole('status', { name: 'Batch results' });
@@ -334,11 +334,11 @@ describe('Needs you (INV-1092)', () => {
     ];
     renderPage();
     fireEvent.click(screen.getByLabelText('Select INV-50'));
-    expect(screen.getByText('1 of these need a decision one at a time; declining or returning needs a reason.')).toBeInTheDocument();
+    expect(screen.getByText('Decide 1 of these one at a time.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Accept or commit/ })).toBeNull();
 
     fireEvent.click(screen.getByLabelText('Select INV-51'));
-    fireEvent.click(screen.getByRole('button', { name: 'Accept or commit 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Accept, commit or approve 1' }));
     const results = await screen.findByRole('status', { name: 'Batch results' });
     expect(within(results).getByText(/out of date/)).toBeInTheDocument();
   });
@@ -377,17 +377,17 @@ describe('Needs you by work tree (INV-1094)', () => {
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'By work tree' }));
     const pack = screen.getByRole('region', { name: 'INV-1 Milestone' });
-    expect(within(pack).getByText('1 contract change, 1 finished item to accept, 3 candidates to commit')).toBeInTheDocument();
+    expect(within(pack).getByText('1 contract change to approve, 1 finished item to review, 3 candidates to commit or decline')).toBeInTheDocument();
     expect(window.localStorage.getItem('involute.todo.view')).toBe('tree');
 
     const toggle = within(pack).getByRole('button', { name: 'Collapse INV-1 Milestone' });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     fireEvent.click(toggle);
     expect(within(pack).getByRole('button', { name: 'Expand INV-1 Milestone' })).toHaveAttribute('aria-expanded', 'false');
-    expect(within(pack).queryByText('1 contract change, 1 finished item to accept, 3 candidates to commit')).toBeNull();
+    expect(within(pack).queryByText('1 contract change to approve, 1 finished item to review, 3 candidates to commit or decline')).toBeNull();
 
     fireEvent.click(within(pack).getByRole('button', { name: 'Expand INV-1 Milestone' }));
-    expect(within(pack).getByText('1 contract change, 1 finished item to accept, 3 candidates to commit')).toBeInTheDocument();
+    expect(within(pack).getByText('1 contract change to approve, 1 finished item to review, 3 candidates to commit or decline')).toBeInTheDocument();
   });
 
   it('leads a pack with what just became ready and marks what waits and what is overdue', () => {
@@ -414,7 +414,7 @@ describe('Needs you by work tree (INV-1094)', () => {
     expect(suggestedDecisions(nodes).map((entry) => entry.kind)).toEqual(['CONTRACT_AMENDMENT', 'CANDIDATE_COMMIT', 'CANDIDATE_COMMIT', 'CANDIDATE_COMMIT']);
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'By work tree' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Do the suggested decisions (4)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply the suggested decisions (4)' }));
     const confirm = screen.getByRole('dialog', { name: 'Confirm decisions for INV-1 Milestone' });
     expect(within(confirm).getAllByRole('listitem')).toHaveLength(4);
     expect(mutations.ContractAmendmentAccept).not.toHaveBeenCalled();
@@ -423,25 +423,25 @@ describe('Needs you by work tree (INV-1094)', () => {
     const results = await screen.findByRole('status', { name: 'Batch results' });
     expect(within(results).getByText('Choose a parent first.')).toBeInTheDocument();
     // The pack runs in its own order (longest wait first): the first commit is refused, the other three are left.
-    expect(within(results).getAllByText('Not done: stopped at the refusal above.')).toHaveLength(3);
+    expect(within(results).getAllByText('Not done: the batch stopped at the refused item above.')).toHaveLength(3);
     expect(mutations.WorkCommit).toHaveBeenCalledTimes(1);
   });
 
   it('summarises a pack in section order', () => {
-    expect(packSummary([node('OPS', 'o', null, ago(HOUR)), node('CANDIDATE_COMMIT', 'c', null, ago(HOUR)), node('CANDIDATE_COMMIT', 'd', null, ago(HOUR))])).toBe('2 candidates to commit, 1 operations item');
+    expect(packSummary([node('OPS', 'o', null, ago(HOUR)), node('CANDIDATE_COMMIT', 'c', null, ago(HOUR)), node('CANDIDATE_COMMIT', 'd', null, ago(HOUR))])).toBe('2 candidates to commit or decline, 1 system problem to check');
   });
 });
 
 describe('Needs you lists every kind the server sends (INV-1582, INV-1677)', () => {
   it('shows missed scheduled rounds and broken GitHub connections in their own sections', () => {
     nodes = [
-      node('SCHEDULE_MISSED', 's-1', work('w-patrol', 'INV-50'), ago(26 * HOUR), { actions: ['OPEN'], reason: '3 scheduled rounds of INV-50 fired with no run' }),
+      node('SCHEDULE_MISSED', 's-1', work('w-patrol', 'INV-50'), ago(26 * HOUR), { actions: ['OPEN'], reason: '3 scheduled runs of INV-50 did not start' }),
       node('GITHUB_DISCONNECTED', 'g-1', null, ago(2 * HOUR), { actions: ['OPEN'], reason: 'INV lost its GitHub connection to acme' }),
     ];
     renderPage();
     const sections = screen.getAllByRole('region').filter((region) => region.className.includes('attention-section'));
-    expect(sections.map((section) => section.getAttribute('aria-label'))).toEqual(['Missed scheduled rounds', 'GitHub connections']);
-    fireEvent.click(within(screen.getByRole('region', { name: 'GitHub connections' })).getAllByText(/lost its GitHub connection/)[0]!);
+    expect(sections.map((section) => section.getAttribute('aria-label'))).toEqual(['Scheduled runs that did not start', 'GitHub connections to fix']);
+    fireEvent.click(within(screen.getByRole('region', { name: 'GitHub connections to fix' })).getAllByText(/lost its GitHub connection/)[0]!);
     expect(within(screen.getByLabelText('Decision')).getByRole('link', { name: 'Open Settings → GitHub' })).toHaveAttribute('href', '/settings?tab=github');
   });
 });

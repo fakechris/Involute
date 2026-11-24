@@ -184,9 +184,9 @@ describe('CandidatesPage', () => {
     try {
       render(<MemoryRouter initialEntries={[path]}><CandidatesPage /></MemoryRouter>);
       const card = within(screen.getAllByRole('article')[0]!);
-      await waitFor(() => expect(card.getByRole('button', { name: 'Accept' })).toBeEnabled());
-      fireEvent.click(card.getByRole('button', { name: 'Accept' }));
-      await waitFor(() => expect(card.getByRole('status')).toHaveTextContent('Saved: Accepted — Same issue'));
+      await waitFor(() => expect(card.getByRole('button', { name: 'Right' })).toBeEnabled());
+      fireEvent.click(card.getByRole('button', { name: 'Right' }));
+      await waitFor(() => expect(card.getByRole('status')).toHaveTextContent('Saved: Right — Same issue'));
       expect(mockRunLink).not.toHaveBeenCalled();
       expect(mockRunCommit).not.toHaveBeenCalled();
       expect(mockRunReject).not.toHaveBeenCalled();
@@ -250,7 +250,7 @@ describe('CandidatesPage', () => {
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByLabelText(/Select all visible/));
-    const batchReject = screen.getByRole('button', { name: /Batch Reject \(2\)/ });
+    const batchReject = screen.getByRole('button', { name: /Batch Decline \(2\)/ });
     expect(batchReject).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Resolution for batch reject'), { target: { value: 'OBSOLETE' } });
     expect(batchReject).toBeEnabled();
@@ -591,10 +591,10 @@ describe('CandidatesPage', () => {
         render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
         const card = screen.getByRole('article', { name: 'INV-60 candidate' });
         const commit = within(card).getByRole('button', { name: /Commit/ });
-        const reject = within(card).getByRole('button', { name: /Reject/ });
+        const reject = within(card).getByRole('button', { name: /Decline/ });
         expect(commit).toBeDisabled();
         expect(reject).toBeDisabled();
-        fireEvent.change(within(card).getByLabelText('Reject reason for INV-60'), { target: { value: 'Works as designed' } });
+        fireEvent.change(within(card).getByLabelText('Decline reason for INV-60'), { target: { value: 'Works as designed' } });
         // A reason alone is not enough: the resolution comes first (INV-1118).
         expect(reject).toBeDisabled();
         expect(reject).toHaveAttribute('title', 'Choose a resolution first: why is it closed?');
@@ -692,7 +692,7 @@ describe('CandidatesPage', () => {
         document.loc?.source?.body?.includes('mutation WorkRestore') ? [restore, { loading: false }] : [mockRunCommit, { loading: false }]) as never);
       try {
         render(<MemoryRouter initialEntries={['/candidates?view=rejected']}><CandidatesPage /></MemoryRouter>);
-        expect(screen.getByRole('button', { name: 'Rejected' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Declined' })).toHaveAttribute('aria-pressed', 'true');
         const row = screen.getByRole('listitem', { name: 'INV-77 rejected' });
         expect(row).toHaveTextContent('Why: Not now');
         const button = within(row).getByRole('button', { name: 'Restore to candidate' });

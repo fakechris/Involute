@@ -36,20 +36,20 @@ import { splitLeadingReference } from '../work/work-reference';
 
 /** Section order: the decisions that unblock running work first. */
 const SECTIONS: Array<{ kind: AttentionKind; title: string }> = [
-  { kind: 'CONTRACT_AMENDMENT', title: 'Contract changes' },
-  { kind: 'WORK_REVIEW', title: 'Accept work' },
-  { kind: 'CANDIDATE_COMMIT', title: 'Commit candidates' },
-  { kind: 'DELIVERY_CHANGE', title: 'Delivery approvals' },
-  { kind: 'AGENT_REQUEST', title: 'Agent questions' },
-  { kind: 'DECISION_REQUESTED', title: 'Decisions requested' },
-  { kind: 'SCHEDULE_MISSED', title: 'Missed scheduled rounds' },
-  { kind: 'GITHUB_DISCONNECTED', title: 'GitHub connections' },
-  { kind: 'OPS', title: 'Operations' },
+  { kind: 'CONTRACT_AMENDMENT', title: 'Contract changes to approve' },
+  { kind: 'WORK_REVIEW', title: 'Finished work to review' },
+  { kind: 'CANDIDATE_COMMIT', title: 'Candidates to commit or decline' },
+  { kind: 'DELIVERY_CHANGE', title: 'Delivery changes to approve' },
+  { kind: 'AGENT_REQUEST', title: 'Questions from agents' },
+  { kind: 'DECISION_REQUESTED', title: 'Agents waiting for a decision' },
+  { kind: 'SCHEDULE_MISSED', title: 'Scheduled runs that did not start' },
+  { kind: 'GITHUB_DISCONNECTED', title: 'GitHub connections to fix' },
+  { kind: 'OPS', title: 'System problems to check' },
 ];
 
 const BATCHABLE: Partial<Record<AttentionKind, string>> = {
   CANDIDATE_COMMIT: 'Commit',
-  CONTRACT_AMENDMENT: 'Accept contract change',
+  CONTRACT_AMENDMENT: 'Approve contract change',
   WORK_REVIEW: 'Accept',
 };
 
@@ -81,14 +81,14 @@ const VIEW_STORAGE_KEY = 'involute.todo.view';
 
 const NOUNS: Record<AttentionKind, [string, string]> = {
   AGENT_REQUEST: ['agent question', 'agent questions'],
-  CANDIDATE_COMMIT: ['candidate to commit', 'candidates to commit'],
-  CONTRACT_AMENDMENT: ['contract change', 'contract changes'],
-  DECISION_REQUESTED: ['decision requested', 'decisions requested'],
-  DELIVERY_CHANGE: ['delivery approval', 'delivery approvals'],
-  OPS: ['operations item', 'operations items'],
-  SCHEDULE_MISSED: ['missed schedule', 'missed schedules'],
+  CANDIDATE_COMMIT: ['candidate to commit or decline', 'candidates to commit or decline'],
+  CONTRACT_AMENDMENT: ['contract change to approve', 'contract changes to approve'],
+  DECISION_REQUESTED: ['agent waiting for a decision', 'agents waiting for a decision'],
+  DELIVERY_CHANGE: ['delivery change to approve', 'delivery changes to approve'],
+  OPS: ['system problem to check', 'system problems to check'],
+  SCHEDULE_MISSED: ['scheduled run that did not start', 'scheduled runs that did not start'],
   GITHUB_DISCONNECTED: ['GitHub connection to fix', 'GitHub connections to fix'],
-  WORK_REVIEW: ['finished item to accept', 'finished items to accept'],
+  WORK_REVIEW: ['finished item to review', 'finished items to review'],
 };
 
 /** Group header kind chip (INV-1385): a project reads as success, a milestone as accent. */
@@ -277,15 +277,15 @@ export function AttentionPage() {
   // One decision, by key or by the batch bar. Returns why it was refused, or null.
   async function accept(item: AttentionItemNode): Promise<string | null> {
     if (item.kind === 'CONTRACT_AMENDMENT') {
-      if (!item.actions.includes('ACCEPT')) return 'This change is out of date: the contract was edited after it was proposed. Reject it instead.';
+      if (!item.actions.includes('ACCEPT')) return 'This change is out of date: the contract was edited after it was proposed. Decline it instead.';
       return amendmentDecisions.accept(item.subjectId);
     }
     if (item.kind === 'WORK_REVIEW' && item.work) {
       try {
         const result = await runReview({ variables: { id: item.work.id, input: { decision: 'ACCEPTED', expectedRevision: item.work.revision } } });
-        return result.data?.workReview.success ? null : result.data?.workReview.message ?? 'The review was not accepted.';
+        return result.data?.workReview.success ? null : result.data?.workReview.message ?? 'Could not accept the work.';
       } catch {
-        return 'The review request failed.';
+        return 'Could not send the decision. Try again.';
       }
     }
     if (item.kind === 'CANDIDATE_COMMIT' && item.work) {
@@ -301,22 +301,22 @@ export function AttentionPage() {
           },
         });
         const committed = result.data?.workCommit.issue;
-        if (!result.data?.workCommit.success || !committed) return result.data?.workCommit.message ?? 'The candidate was not committed.';
+        if (!result.data?.workCommit.success || !committed) return result.data?.workCommit.message ?? 'Could not commit the candidate.';
         if (committed.revision) {
           recordCommitGesture([commitUndoItem(work, committed.revision, { acceptance: work.acceptance ?? '', assigneeId, priority: work.priority ?? null })]);
         }
         return null;
       } catch {
-        return 'The commit request failed.';
+        return 'Could not send the commit. Try again.';
       }
     }
     if (item.kind === 'DELIVERY_CHANGE') {
       try {
         // No owner chosen: the server keeps the current owner, as the card's default does.
         const result = await runDeliveryDecide({ variables: { approve: true, id: item.subjectId, note: null, ownerId: null } });
-        return result.data?.deliveryChangeDecide.success ? null : result.data?.deliveryChangeDecide.message ?? 'The delivery change was not approved.';
+        return result.data?.deliveryChangeDecide.success ? null : result.data?.deliveryChangeDecide.message ?? 'Could not approve the delivery change.';
       } catch {
-        return 'The delivery request failed.';
+        return 'Could not send the approval. Try again.';
       }
     }
     return 'Decide this one on the right.';
@@ -330,7 +330,7 @@ export function AttentionPage() {
     for (const item of entries) {
       const label = item.work?.identifier ?? item.reason;
       if (stopped) {
-        results.push({ id: item.id, label, message: 'Not done: stopped at the refusal above.' });
+        results.push({ id: item.id, label, message: 'Not done: the batch stopped at the refused item above.' });
         continue;
       }
       const message = await accept(item);
@@ -446,7 +446,7 @@ export function AttentionPage() {
         hint={data ? `${data.attentionSummary.total} waiting on your decision` : undefined}
         actions={
           <>
-          <span className="page-note">J/K move · A accept or commit · R reason · H snooze · Z undo · X select</span>
+          <span className="page-note">J/K move · A accept, commit or approve · R reason · H snooze · Z undo · X select</span>
           <SegmentedControl
             aria-label="Group by"
             semantics="tabs"
@@ -508,17 +508,17 @@ export function AttentionPage() {
                             variant="subtle"
                             onClick={() => setPackConfirm({ items: suggestedDecisions(section.groups[0]!.items), key: section.key, title: section.title })}
                           >
-                            {`Do the suggested decisions (${suggestedDecisions(section.groups[0]!.items).length})`}
+                            {`Apply the suggested decisions (${suggestedDecisions(section.groups[0]!.items).length})`}
                           </Btn>
                         </div>
                       ) : null}
                       {packConfirm?.key === section.key ? (
                         <div className="attention-pack-confirm" role="dialog" aria-label={`Confirm decisions for ${section.title}`}>
-                          <p>These will be decided as proposed. Nothing that needs a reason is in the list.</p>
+                          <p>Each item below gets the decision shown. None of them needs a reason.</p>
                           <ul>
                             {packConfirm.items.map((entry) => (
                               <li key={entry.id}>
-                                <span className="mono">{entry.work?.identifier}</span> {entry.kind === 'CANDIDATE_COMMIT' ? 'commit' : entry.kind === 'CONTRACT_AMENDMENT' ? 'accept the contract change' : 'approve the delivery change'}
+                                <span className="mono">{entry.work?.identifier}</span> {entry.kind === 'CANDIDATE_COMMIT' ? 'commit' : entry.kind === 'CONTRACT_AMENDMENT' ? 'approve the contract change' : 'approve the delivery change'}
                               </li>
                             ))}
                           </ul>
@@ -610,7 +610,7 @@ export function AttentionPage() {
                 refresh={refresh}
               />
             ) : (
-              <EmptyState size="inline" title="Expand a parent group on the left to inspect its items." />
+              <EmptyState size="inline" title="Open a group on the left to choose an item." />
             )}
           </div>
         </div>
@@ -632,11 +632,11 @@ export function AttentionPage() {
         aria-label="Batch decisions"
         count={selected.length}
         onClear={() => setSelectedIds([])}
-        status={oneByOne > 0 ? `${oneByOne} of these need a decision one at a time; declining or returning needs a reason.` : undefined}
+        status={oneByOne > 0 ? `Decide ${oneByOne} of these one at a time.` : undefined}
       >
         {batchable.length > 0 ? (
           <Btn variant="accent" disabled={batchPending} onClick={() => void runBatch()}>
-            {batchPending ? 'Deciding…' : `Accept or commit ${batchable.length}`}
+            {batchPending ? 'Deciding…' : `Accept, commit or approve ${batchable.length}`}
           </Btn>
         ) : null}
       </BulkActionBar>
@@ -848,10 +848,10 @@ function HandledForYou({ items, reviewStateFor, onChanged }: { items: HandledIte
         {items.map((item) => (
           <li key={item.id} className="attention-handled__row">
             <span className="mono">{item.work.identifier}</span>{' '}
-            <span>{item.gate === 'candidate_commit' ? 'Auto-committed' : item.gate === 'contract_amendment' ? 'Amendment auto-accepted' : 'Auto-accepted'}</span>{' '}
+            <span>{item.gate === 'candidate_commit' ? 'Committed automatically' : item.gate === 'contract_amendment' ? 'Contract change approved automatically' : 'Accepted automatically'}</span>{' '}
             <span className="list-row__note" title={item.reason}>{item.reason.replace(/^policy\.auto_decision:\s*/, 'Why: ')}</span>{' '}
             <span title={new Date(item.at).toLocaleString()}>{formatWait(item.at)} ago</span>{' '}
-            {item.undone ? <Badge>Returned</Badge> : item.reversible ? (
+            {item.undone ? <Badge>Undone</Badge> : item.reversible ? (
               item.gate === 'contract_amendment' ? (
                 reasonFor?.id === item.id ? (
                   <span className="inline-form">

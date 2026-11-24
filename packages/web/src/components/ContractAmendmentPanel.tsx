@@ -106,8 +106,8 @@ export function ContractAmendmentPanel({
       </dl>
       {amendment.stale ? (
         <p role="status" className="issue-panel__inline-hint" style={{ margin: '6px 0 0' }}>
-          The contract changed since this was proposed. Compare it with the contract below, then edit the contract
-          yourself or reject this change.
+          The contract changed after this was proposed. Decline this change, or open the work and edit the contract
+          yourself.
         </p>
       ) : null}
       {error ? (
@@ -118,7 +118,7 @@ export function ContractAmendmentPanel({
       {rejecting ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
           <label className="observation-field">
-            <span>Why not (the agent reads this)</span>
+            <span>Reason for declining (the agent sees this)</span>
             <textarea aria-label="Rejection note" rows={2} value={note} disabled={busy} onChange={(event) => setNote(event.target.value)} />
           </label>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -128,7 +128,7 @@ export function ContractAmendmentPanel({
               disabled={busy || !note.trim()}
               onClick={() => void decide(() => onReject(amendment.id, note.trim()))}
             >
-              Reject change
+              Decline change
             </button>
             <button type="button" className="ui-action ui-action--subtle" disabled={busy} onClick={() => setRejecting(false)}>
               Cancel
@@ -143,10 +143,10 @@ export function ContractAmendmentPanel({
             disabled={busy || amendment.stale}
             onClick={() => void decide(() => onAccept(amendment.id))}
           >
-            Accept change
+            Approve change
           </button>
           <button type="button" className="ui-action ui-action--subtle" disabled={busy} onClick={() => setRejecting(true)}>
-            Reject…
+            Decline…
           </button>
         </div>
       )}
