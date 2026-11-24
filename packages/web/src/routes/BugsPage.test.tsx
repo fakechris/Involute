@@ -1,9 +1,12 @@
+import { useQuery } from '@apollo/client/react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BugsPage } from './BugsPage';
+import { writeStoredTeamKey } from '../board/utils';
 import { expectRowOpensDrawer, renderWithDrawerHost } from '../test/drawer-host-harness';
+import { GRAPH_PROJECTS_QUERY } from '../work/queries';
 
 vi.mock('../components/RouteIssueDrawer', () => import('../test/route-issue-drawer-stub'));
 
@@ -377,6 +380,49 @@ describe('BugsPage', () => {
       restoreFocus.mockRestore();
     },
   );
+
+  it('offers only projects in the report team when no active team is stored', async () => {
+    writeStoredTeamKey(null);
+    const query = vi.mocked(useQuery);
+    const original = query.getMockImplementation()!;
+    const reportProject = { repository: 'acme/inv', name: 'Involute project', identifier: 'INV-100' };
+    const otherProject = { repository: 'acme/ops', name: 'Ops project', identifier: 'OPS-100' };
+    const ops = { ...bugsPageData.teams.nodes[0]!, id: 'team-2', key: 'OPS' };
+    query.mockImplementation((document, options) => {
+      const result = original(document, options);
+      if (document === GRAPH_PROJECTS_QUERY) {
+        expect(options).toMatchObject({ variables: { teamFilter: { key: { eq: 'INV' } } } });
+        return {
+          ...result,
+          data: {
+            projectSummary: {
+              projects: [reportProject],
+              projectsWithoutRepository: [{ identifier: 'INV-200', name: 'Internal project' }],
+            },
+          },
+        } as typeof result;
+      }
+      return {
+        ...result,
+        data: {
+          ...bugsPageData,
+          projectSummary: { projects: [reportProject, otherProject] },
+          teams: { nodes: [...bugsPageData.teams.nodes, ops] },
+        },
+      } as typeof result;
+    });
+    try {
+      render(<MemoryRouter><BugsPage /></MemoryRouter>);
+      fireEvent.click(screen.getByRole('button', { name: 'Report bug' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Report bug drawer' });
+      const project = within(dialog).getByRole('combobox', { name: 'Project' });
+      expect(within(project).getByRole('option', { name: 'Involute project' })).toBeInTheDocument();
+      expect(within(project).getByRole('option', { name: 'Internal project' })).toBeInTheDocument();
+      expect(within(project).queryByRole('option', { name: 'Ops project' })).not.toBeInTheDocument();
+    } finally {
+      query.mockImplementation(original);
+    }
+  });
 
   // INV-1387
   it('opens bugs in the drawer from the open list, Past their SLA and Reported again', async () => {

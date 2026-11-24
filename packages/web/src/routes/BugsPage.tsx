@@ -29,6 +29,8 @@ import { ReportBugDialog } from '../components/ReportBugDialog';
 import { Badge, EmptyState, InlineError, LoadingState, StatRow, StatTile } from '../components/status';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { placementProjects } from '../work/placement';
+import { GRAPH_PROJECTS_QUERY } from '../work/queries';
+import type { GraphProjectsQueryData } from '../work/types';
 import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
 const CLOSED_STATE_TYPES = new Set(['COMPLETED', 'CANCELED']);
@@ -70,7 +72,11 @@ export function BugsPage() {
 
   const summary = data?.bugSummary ?? null;
   const reportTeam = data?.teams?.nodes.find((team) => team.key === teamKey) ?? data?.teams?.nodes[0];
-  const reportProjects = useMemo(() => placementProjects(data?.projectSummary), [data?.projectSummary]);
+  const { data: reportProjectData, loading: reportProjectsLoading } = useQuery<GraphProjectsQueryData>(GRAPH_PROJECTS_QUERY, {
+    variables: { teamFilter: { key: { eq: reportTeam?.key } } },
+    skip: !reportTeam?.viewerCanWrite,
+  });
+  const reportProjects = useMemo(() => placementProjects(reportProjectData?.projectSummary), [reportProjectData?.projectSummary]);
 
   const openBugs = useMemo(() => {
     const nodes = data?.issues.nodes ?? [];
@@ -141,7 +147,7 @@ export function BugsPage() {
         title="Bugs"
         count={summary?.openCount ?? 0}
         actions={reportTeam?.viewerCanWrite ? (
-          <Btn variant="accent" onClick={() => setIsReportBugOpen(true)}>
+          <Btn variant="accent" disabled={reportProjectsLoading && !reportProjectData} onClick={() => setIsReportBugOpen(true)}>
             Report bug
           </Btn>
         ) : null}

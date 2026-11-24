@@ -1046,10 +1046,6 @@ export const SIMILAR_BUGS_QUERY = gql`
 
 export const BUGS_PAGE_QUERY = gql`
   query BugsPage($teamFilter: TeamFilter, $issueFilter: IssueFilter) {
-    projectSummary(teamFilter: $teamFilter) {
-      projects { repository name identifier }
-      projectsWithoutRepository { identifier name }
-    }
     issueLabels { nodes { id name } }
     bugSummary(teamFilter: $teamFilter) {
       openCount
