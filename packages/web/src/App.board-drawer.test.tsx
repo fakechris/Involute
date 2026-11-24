@@ -9,6 +9,39 @@ function renderTestApp(queryState = { data: boardQueryResult, loading: false }, 
 }
 
 describe('App board drawer flows', () => {
+  it('keeps Tab in the drawer and Escape returns focus to the card (INV-2116)', async () => {
+    const data = structuredClone(boardQueryResult);
+    data.issues.nodes = data.issues.nodes.map((issue) =>
+      issue.identifier === 'INV-2' ? { ...issue, kind: 'ISSUE', repository: 'fakechris/Involute' } : issue,
+    );
+    renderTestApp({ data, loading: false });
+    const card = await screen.findByRole('button', { name: 'Open INV-2' });
+    card.focus();
+    fireEvent.click(card);
+
+    const drawer = within(await screen.findByRole('dialog', { name: 'Issue detail drawer' }));
+    const close = drawer.getByRole('button', { name: 'Close' });
+    expect(close).toHaveFocus();
+    const first = drawer.getByRole('button', { name: 'Next issue' });
+    const last = drawer.getByRole('button', { name: 'Add sub-issue to INV-2' });
+    first.focus();
+    fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+    expect(last).toHaveFocus();
+    fireEvent.keyDown(last, { key: 'Tab' });
+    expect(first).toHaveFocus();
+
+    const title = drawer.getByRole('textbox', { name: 'Issue title' });
+    title.focus();
+    fireEvent.change(title, { target: { value: 'Discard this edit' } });
+    fireEvent.keyDown(title, { key: 'Escape' });
+    expect(title).toHaveValue('Ready item');
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(close, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Issue detail drawer' })).not.toBeInTheDocument();
+    expect(card).toHaveFocus();
+  });
+
   it('shows the clicked issue details including parent information', async () => {
     renderTestApp();
 

@@ -25,8 +25,10 @@ import { Select } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { ProjectBadge } from '../components/ProjectBadge';
+import { ReportBugDialog } from '../components/ReportBugDialog';
 import { Badge, EmptyState, InlineError, LoadingState, StatRow, StatTile } from '../components/status';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
+import { placementProjects } from '../work/placement';
 import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
 const CLOSED_STATE_TYPES = new Set(['COMPLETED', 'CANCELED']);
@@ -47,6 +49,7 @@ export function BugsPage() {
   const navigate = useNavigate();
   const issueHref = useIssueHref();
   const teamKey = readStoredTeamKey();
+  const [isReportBugOpen, setIsReportBugOpen] = useState(false);
 
   const queryVariables: BugsPageQueryVariables = {
     ...(teamKey ? { teamFilter: { key: { eq: teamKey } } } : {}),
@@ -66,6 +69,8 @@ export function BugsPage() {
   );
 
   const summary = data?.bugSummary ?? null;
+  const reportTeam = data?.teams?.nodes.find((team) => team.key === teamKey) ?? data?.teams?.nodes[0];
+  const reportProjects = useMemo(() => placementProjects(data?.projectSummary), [data?.projectSummary]);
 
   const openBugs = useMemo(() => {
     const nodes = data?.issues.nodes ?? [];
@@ -121,7 +126,7 @@ export function BugsPage() {
     onOpen: (issue) => navigate(issueHref(issue, 'drawer'), { preventScrollReset: true }),
     onSelectAll: () => undefined,
     onToggle: () => undefined,
-  });
+  }, !isReportBugOpen);
 
   const urgentHighOpen =
     summary?.byPriority
@@ -135,11 +140,11 @@ export function BugsPage() {
         icon={<IcoBug size={14} />}
         title="Bugs"
         count={summary?.openCount ?? 0}
-        actions={
-          <Btn variant="accent" onClick={() => navigate('/', { state: { openReportBug: true } })}>
+        actions={reportTeam?.viewerCanWrite ? (
+          <Btn variant="accent" onClick={() => setIsReportBugOpen(true)}>
             Report bug
           </Btn>
-        }
+        ) : null}
       />
       <PageToolbar
         aria-label="Bug filters"
@@ -337,6 +342,18 @@ export function BugsPage() {
           </div>
         ) : null}
       </PageBody>
+      {isReportBugOpen && reportTeam?.viewerCanWrite ? (
+        <ReportBugDialog
+          isOpen
+          teamId={reportTeam.id}
+          teamKey={reportTeam.key}
+          projects={reportProjects}
+          labels={data?.issueLabels?.nodes ?? []}
+          boardRepository={project}
+          onClose={() => setIsReportBugOpen(false)}
+          onReported={() => void refetch().catch(() => undefined)}
+        />
+      ) : null}
     </div>
   );
 }

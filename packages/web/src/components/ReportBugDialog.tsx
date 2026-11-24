@@ -47,6 +47,7 @@ interface ReportBugDialogProps {
   initialTitle?: string;
   initialDescription?: string;
   onClose: () => void;
+  onReported?: () => void;
 }
 
 function useDebounced(value: string, delayMs: number): string {
@@ -64,7 +65,7 @@ function useDebounced(value: string, delayMs: number): string {
  * to triage instead. Priority and steps to reproduce are required, and open
  * bugs with similar titles are shown so duplicates are caught before filing.
  */
-export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boardRepository, initialTitle = '', initialDescription = '', onClose }: ReportBugDialogProps) {
+export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boardRepository, initialTitle = '', initialDescription = '', onClose, onReported }: ReportBugDialogProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
@@ -183,6 +184,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
       }
       if (!triage && placement) rememberPlacement(teamKey, placement);
       setReported({ id: payload.issue.id, identifier: payload.issue.identifier, triage });
+      onReported?.();
     } catch {
       setErrorMessage(REPORT_ERROR_MESSAGE);
     }
