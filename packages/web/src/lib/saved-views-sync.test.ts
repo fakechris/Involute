@@ -79,6 +79,41 @@ describe('saved views sync', () => {
     expect(server.map((view) => view.name).sort()).toEqual(['Early', 'Other device']);
   });
 
+  it('uploads a view saved before the account was known once on a first sync', async () => {
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'Early', state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    const server: ServerView[] = [];
+    const { client, mutate } = fakeClient(server);
+    stop = startSavedViewsSync(client, 'INV', 'user-a');
+
+    await vi.waitFor(() => expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual([uuid(100)]));
+    expect(upsertCalls(mutate)).toHaveLength(1);
+    expect(server.map((view) => view.name)).toEqual(['Early']);
+  });
+
+  it('keeps a refused view saved before the account was known and retries it on the next pull', async () => {
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    setSavedViewsAccount(null);
+    const tooLong = 'x'.repeat(121);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: tooLong, state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    const server: ServerView[] = [];
+    const first = fakeClient(server);
+    stop = startSavedViewsSync(first.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(first.mutate)).toHaveLength(1));
+    await flush();
+    expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual(['view-early']);
+    stop();
+
+    // A reload: the next pull retries the view instead of replacing it with the server's empty list.
+    const second = fakeClient(server);
+    stop = startSavedViewsSync(second.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(second.mutate)).toHaveLength(1));
+    await flush();
+    expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual(['view-early']);
+  });
+
   it('gives a view saved before sign-in to nobody else once an account signs out', () => {
     setSavedViewsAccount(null);
     writeSavedBoardViews('INV', [{ id: 'view-early', name: 'Early', state: BOARD_STATE }]);
