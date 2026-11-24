@@ -135,6 +135,52 @@ describe('saved views sync', () => {
     expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual(['view-early']);
   });
 
+  it('does not retry a refused early view that was deleted in this browser', async () => {
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'x'.repeat(121), state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    const server: ServerView[] = [];
+    const first = fakeClient(server);
+    stop = startSavedViewsSync(first.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(first.mutate)).toHaveLength(1));
+    await flush();
+    stop();
+    writeSavedBoardViews('INV', []);
+
+    const second = fakeClient(server);
+    stop = startSavedViewsSync(second.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(second.query).toHaveBeenCalled());
+    await flush();
+    expect(upsertCalls(second.mutate)).toHaveLength(0);
+    expect(readSavedBoardViews('INV')).toEqual([]);
+  });
+
+  it('keeps a refused early view for the next pull when a retry is interrupted', async () => {
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'x'.repeat(121), state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    const server: ServerView[] = [];
+    const first = fakeClient(server);
+    stop = startSavedViewsSync(first.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(first.mutate)).toHaveLength(1));
+    await flush();
+    stop();
+
+    const hanging = fakeClient(server);
+    hanging.mutate.mockImplementation(() => new Promise(() => {}));
+    stop = startSavedViewsSync(hanging.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(hanging.mutate).toHaveBeenCalledTimes(1));
+    stop();
+
+    const third = fakeClient(server);
+    stop = startSavedViewsSync(third.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(third.mutate)).toHaveLength(1));
+    await flush();
+    expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual(['view-early']);
+  });
+
   it('gives a view saved before sign-in to nobody else once an account signs out', () => {
     setSavedViewsAccount(null);
     writeSavedBoardViews('INV', [{ id: 'view-early', name: 'Early', state: BOARD_STATE }]);

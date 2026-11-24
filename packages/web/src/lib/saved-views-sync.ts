@@ -103,11 +103,18 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string, accou
     // Views saved before the account was known (INV-2157) are in the local copy, so a first
     // migration uploads them; otherwise they are uploaded here. A refused one is kept for the
     // next pull to retry, like a refused migrated view (INV-1193), without retrying the rest.
+    // Only views still in the local list are retried, so a view deleted meanwhile stays deleted,
+    // and the list is kept until the uploads finish, so an interrupted pull loses none.
     for (const kind of ['board', 'backlog'] as const) {
       const retryKey = SAVED_VIEWS_RETRY_KEY(accountId, teamKey, kind);
-      const early = [...readRetryViews(retryKey), ...(takeUnsyncedSavedViews(kind, teamKey, accountId) as AnyView[])];
-      window.localStorage.removeItem(retryKey);
-      if (migrating) continue;
+      const local = new Set((kind === 'board' ? readSavedBoardViews(teamKey) : readSavedBacklogViews(teamKey)).map((view) => view.id));
+      const queued = [...readRetryViews(retryKey), ...(takeUnsyncedSavedViews(kind, teamKey, accountId) as AnyView[])];
+      const early = queued.filter((view, index) => local.has(view.id) && queued.findIndex((other) => other.id === view.id) === index);
+      if (migrating || early.length === 0) {
+        window.localStorage.removeItem(retryKey);
+        continue;
+      }
+      window.localStorage.setItem(retryKey, JSON.stringify(early));
       const have = new Set(server.map((view) => view.id));
       for (const view of early) {
         if (have.has(view.id)) continue;
@@ -117,6 +124,7 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string, accou
         else refused[kind].push(view);
       }
       if (refused[kind].length > 0) window.localStorage.setItem(retryKey, JSON.stringify(refused[kind]));
+      else window.localStorage.removeItem(retryKey);
     }
     known = new Map(server.map((view) => [view.id, fromServer(view)]));
     write('board', [...server.filter((view) => view.kind === 'board').map(fromServer), ...refused.board]);
