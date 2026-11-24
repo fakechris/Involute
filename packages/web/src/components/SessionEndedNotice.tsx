@@ -31,7 +31,7 @@ export function SessionEndedNotice({ floating = false }: { floating?: boolean })
   if (!sessionEnded || (floating ? activeInlineNotice !== undefined : activeInlineNotice !== id)) return null;
 
   return (
-    <div className={floating ? 'page-notice page-notice--floating' : 'page-notice'} role="alert">
+    <div className={`page-notice page-notice--session-ended${floating ? ' page-notice--floating' : ''}`} role="alert">
       {signInUrl ? (
         <>
           <p className="page-notice__text">Your session ended. Copy any unsaved text before you sign in.</p>
