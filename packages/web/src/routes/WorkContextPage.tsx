@@ -25,6 +25,7 @@ import type {
   WorkContextPageQueryVariables,
   WorkRef,
 } from '../work/types';
+import { isAuthenticationError } from '../lib/apollo';
 import { WorkReferenceText } from '../components/WorkReference';
 
 function formatWhen(value: string | null | undefined): string {
@@ -88,13 +89,17 @@ export function WorkContextPage() {
       .then((session) => setViewer(session.viewer))
       .catch(() => setViewer(null));
   }, []);
-  const { data, error, loading, refetch } = useQuery<WorkContextPageQueryData, WorkContextPageQueryVariables>(
+  const { data: liveData, previousData, error, loading, refetch } = useQuery<WorkContextPageQueryData, WorkContextPageQueryVariables>(
     WORK_CONTEXT_PAGE_QUERY,
     {
       skip: !id,
       variables: { id: id ?? '' },
     },
   );
+  // A session that ends while the page is open keeps what was loaded (INV-2143).
+  const keptWork = previousData?.workContext?.work ?? null;
+  const keepAfterSignOut = isAuthenticationError(error) && Boolean(keptWork) && (keptWork?.id === id || keptWork?.identifier === id);
+  const data = liveData ?? (keepAfterSignOut ? previousData : undefined);
   const bundle = data?.workContext ?? null;
   const amendmentDecisions = useContractAmendmentDecisions(() => refetch());
   // The agent that ran it most recently: who a decision it asked for goes back to (INV-794).
@@ -114,7 +119,7 @@ export function WorkContextPage() {
     );
   }
 
-  if (error) {
+  if (error && !keepAfterSignOut) {
     return (
       <div className="observation-page">
         <PageHeader title="Work context" />

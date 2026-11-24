@@ -388,4 +388,29 @@ describe('App issue detail editing', () => {
     const contract = within(drawer).getByRole('region', { name: 'Contract' });
     expect(within(contract).queryByRole('region', { name: 'Proposed contract change' })).not.toBeInTheDocument();
   });
+
+  it('asks before Escape throws away a changed description, and leaves an unchanged one at once (INV-2144)', async () => {
+    renderTestApp();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByLabelText('Issue detail drawer');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    fireEvent.click(within(drawer).getByLabelText('Edit description'));
+    const input = within(drawer).getByLabelText('Issue description');
+    fireEvent.change(input, { target: { value: 'A long description I do not want to lose' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(confirm).toHaveBeenCalledWith('Discard your changes to the description?');
+    expect(within(drawer).getByLabelText('Issue description')).toHaveValue('A long description I do not want to lose');
+
+    confirm.mockReturnValue(true);
+    fireEvent.keyDown(within(drawer).getByLabelText('Issue description'), { key: 'Escape' });
+    expect(within(drawer).queryByLabelText('Issue description')).toBeNull();
+
+    confirm.mockClear();
+    fireEvent.click(within(drawer).getByLabelText('Edit description'));
+    fireEvent.keyDown(within(drawer).getByLabelText('Issue description'), { key: 'Escape' });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(within(drawer).queryByLabelText('Issue description')).toBeNull();
+    confirm.mockRestore();
+  });
 });

@@ -368,7 +368,7 @@ export function DeliveryPage() {
             <EmptyState
               title="Could not load teams"
               body={loadErrorMessage(teamError)}
-              action={<Btn variant="subtle" onClick={() => void refetchTeams()}>Retry</Btn>}
+              action={<Btn variant="subtle" onClick={() => { refetchTeams().catch(() => undefined); }}>Retry</Btn>}
             />
           </div>
         ) : !teamData ? (

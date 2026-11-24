@@ -19,15 +19,17 @@ export function writeShortcutsEnabled(enabled: boolean): void {
   }
 }
 
-// Widgets whose own letter keys (type-ahead, menus) must keep working.
-const OWN_KEYS_SELECTOR = '[role="listbox"], [role="menu"], [role="menubar"], [role="tree"], [role="grid"], [role="combobox"], [role="dialog"]';
+// Widgets whose own letter keys (type-ahead, menus) must keep working. A dialog
+// is not one: the issue drawer is a dialog that takes focus, and the global
+// shortcuts must stay off inside it (INV-2142). Text fields are allowed anyway.
+const OWN_KEYS_SELECTOR = '[role="listbox"], [role="menu"], [role="menubar"], [role="tree"], [role="grid"], [role="combobox"]';
 
 /**
  * Single-key shortcuts are handled in many places (the app shell, the board,
  * lists, Needs you). Rather than teach each one the setting, one capturing
  * listener on window stops a plain character key before any of them see it
- * when the person turned shortcuts off. Typing, modified keys (⌘K, ⌘↵),
- * Escape, Enter, Tab and arrows are not touched.
+ * when the person turned shortcuts off. Typing, type-ahead widgets, modified
+ * keys (⌘K, ⌘↵), Escape, Enter, Tab and arrows are not touched.
  */
 export function installShortcutGuard(target: Window = window): () => void {
   function guard(event: KeyboardEvent) {
