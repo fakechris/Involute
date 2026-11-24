@@ -91,7 +91,7 @@ describe('team members page', () => {
     renderApp({ data: boardQueryResult, teamPageData: teamPage({ viewerCanManage: false }), loading: false }, ['/teams/INV/members']);
 
     const table = await screen.findByRole('table', { name: 'Team members' });
-    expect(within(table).getByText('Member')).toBeInTheDocument();
+    expect(within(table).getByText('Editor')).toBeInTheDocument();
     expect(screen.queryByLabelText('Member email')).not.toBeInTheDocument();
     expect(within(table).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
     const teamNav = screen.getByRole('navigation', { name: 'Team pages' });

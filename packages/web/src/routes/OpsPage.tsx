@@ -52,9 +52,9 @@ export function OpsPage() {
   if (forbidden) {
     return (
       <div className="observation-page">
-        <PageHeader title="Ops" />
+        <PageHeader title="Operations" />
         <PageBody width="wide">
-          <EmptyState size="inline" title="The ops page is for workspace admins." />
+          <EmptyState size="inline" title="Operations is for workspace admins." />
         </PageBody>
       </div>
     );
@@ -93,7 +93,7 @@ export function OpsPage() {
             </section>
 
             <section id="sync-dead-letters" className="work-context__section">
-              <h2>Sync dead letters</h2>
+              <h2>PRs that failed to sync</h2>
               <p className="observation-hint">PRs that failed three times. Clearing one makes the next sync (within 10 minutes) retry it.</p>
               {overview.syncDeadLetters.length === 0 ? (
                 <EmptyState size="inline" title="None." />
@@ -155,7 +155,7 @@ export function OpsPage() {
                 <EmptyState size="inline" title="None." />
               ) : (
                 <table className="ops-table" aria-label="Outbox failures">
-                  <thead><tr><th>Event</th><th>Attempts</th><th>Last error</th><th>Created</th><th>Dead-lettered</th></tr></thead>
+                  <thead><tr><th>Event</th><th>Attempts</th><th>Last error</th><th>Created</th><th>Stopped retrying</th></tr></thead>
                   <tbody>
                     {overview.outboxFailures.map((row) => (
                       <tr key={row.id}>

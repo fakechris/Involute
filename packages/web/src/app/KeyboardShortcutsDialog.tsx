@@ -17,13 +17,13 @@ export interface ShortcutSection {
 export const SHORTCUT_SECTIONS: ShortcutSection[] = [
   {
     id: 'navigation',
-    title: 'Navigation (G Chords)',
+    title: 'Go to (press G, then a key)',
     items: [
       { id: 'nav-todo', label: 'Go to Needs you', description: 'Every decision waiting on you', keys: ['G', 'T'] },
       { id: 'nav-board', label: 'Go to Board', description: 'Active committed board', keys: ['G', 'B'] },
       { id: 'nav-backlog', label: 'Go to Backlog', description: 'Issue backlog table', keys: ['G', 'L'] },
-      { id: 'nav-candidates', label: 'Go to Candidates', description: 'Proposed work review queue', keys: ['G', 'C'] },
-      { id: 'nav-in-review', label: 'Go to In Review', description: 'Completed agent runs review', keys: ['G', 'N'] },
+      { id: 'nav-candidates', label: 'Go to Candidates', description: 'Proposed work to commit or decline', keys: ['G', 'C'] },
+      { id: 'nav-in-review', label: 'Go to In Review', description: 'Finished work to accept or return', keys: ['G', 'N'] },
       { id: 'nav-bugs', label: 'Go to Bugs', description: 'Reported bugs queue', keys: ['G', 'U'] },
       { id: 'nav-graph', label: 'Go to Graph', description: 'Work-graph relationships view', keys: ['G', 'R'] },
       { id: 'nav-inbox', label: 'Go to Activity', description: 'What happened on your work', keys: ['G', 'I'] },
@@ -31,14 +31,15 @@ export const SHORTCUT_SECTIONS: ShortcutSection[] = [
       { id: 'nav-projects', label: 'Go to Projects', description: 'Projects overview', keys: ['G', 'P'] },
       { id: 'nav-cycles', label: 'Go to Milestones', description: 'Milestones and delivery cycles', keys: ['G', 'V'] },
       { id: 'nav-views', label: 'Go to Views', description: 'Saved filters and custom views', keys: ['G', 'W'] },
-      { id: 'nav-members', label: 'Go to Members', description: 'Team and workspace members', keys: ['G', 'E'] },
-      { id: 'nav-settings', label: 'Go to Settings', description: 'Workspace configuration', keys: ['G', 'S'] },
+      { id: 'nav-hygiene', label: 'Go to Work health', description: 'Committed work that breaks the work graph rules', keys: ['G', 'H'] },
+      { id: 'nav-members', label: 'Go to team members', description: 'Members of the current team', keys: ['G', 'E'] },
+      { id: 'nav-settings', label: 'Go to Settings', description: 'Your profile, preferences and the workspace', keys: ['G', 'S'] },
       { id: 'nav-access', label: 'Go to team settings', description: "Current team's settings; agent tokens are under Agents", keys: ['G', 'A'] },
     ],
   },
   {
     id: 'actions',
-    title: 'Global Actions',
+    title: 'Actions',
     items: [
       { id: 'act-create', label: 'Create issue', description: 'Open quick issue composer anywhere', keys: ['C'] },
       { id: 'act-undo', label: 'Undo', description: 'Revert the latest status change', keys: ['⌘', 'Z'] },

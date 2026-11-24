@@ -211,8 +211,8 @@ it.each(['', '__none__'])('hides the timeline link without a real repository: %s
 it('flags partial coverage and shows all coverage counts', async () => {
   mount(async () => fixture({ leadTime: { ...metric, sampleCount: 2, coverage: { missingCount: 1 } }, coverage: { workCount: 8, noHistoryCount: 1, openEpisodeCount: 2, closedWithoutAcceptanceCount: 3, unknownEpisodeCount: 1 } }));
   expect(await screen.findByText('Low coverage')).toBeInTheDocument();
-  expect(screen.getByText(/Interpret cautiously/)).toHaveTextContent('fewer than 5');
-  expect(screen.getByText(/Works: 8/)).toHaveTextContent('No history: 1 · Open: 2 · Closed without acceptance: 3 · Unknown: 1');
+  expect(screen.getByText(/Use with care/)).toHaveTextContent('fewer than 5');
+  expect(screen.getByText(/Items: 8/)).toHaveTextContent('No history: 1 · Open: 2 · Closed without acceptance: 3 · Unknown: 1');
 });
 it('renders full metrics, text equivalent and keyboard-activatable chart buttons', async () => {
   const requests = mount(async () => fixture());
@@ -231,7 +231,7 @@ it('loads every drill-down page and reconciles episodes rather than items', asyn
   const list = await screen.findByLabelText('Delivery drill-down');
   expect(list).toHaveTextContent('2 items · 5 samples of 5');
   expect(list).toHaveTextContent('Run wall-clock (not work time): sum 1.0h · union 30m');
-  expect(list).toHaveTextContent('Human actual time: Unknown · Agent actual time: Unknown');
+  expect(list).not.toHaveTextContent('Human actual time');
   const link = within(list).getByRole('link', { name: /INV-1 Work 1/ });
   fireEvent.click(link);
   expect(list).toBeInTheDocument();

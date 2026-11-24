@@ -85,8 +85,8 @@ describe('IncidentsPage (INV-1129)', () => {
     const stats = screen.getByLabelText('Incident statistics');
     expect(stats).toHaveTextContent('1Ongoing');
     expect(stats).toHaveTextContent('2Resolved');
-    expect(stats).toHaveTextContent('1h 30m (n=2)MTTM');
-    expect(stats).toHaveTextContent('3h 0m (n=2)MTTR');
+    expect(stats).toHaveTextContent('1h 30m (n=2)Mean time to mitigate (MTTM)');
+    expect(stats).toHaveTextContent('3h 0m (n=2)Mean time to resolve (MTTR)');
     const followUps = screen.getByLabelText('Follow-ups');
     expect(followUps).toHaveTextContent('50%Follow-ups done (1 of 2)');
     expect(followUps).toHaveTextContent('1Overdue, still open');

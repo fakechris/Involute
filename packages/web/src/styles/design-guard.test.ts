@@ -235,20 +235,8 @@ const BANNED_WORDS: Array<[name: string, pattern: RegExp]> = [
   ['docs path', /\bdocs\/[\w./-]+\.md\b/], // a repository path a person cannot open
 ];
 
-// Existing text that still breaks the rules; INV-2135 rewrites it and empties this list.
-const WORDING_ALLOWLIST = new Set<string>([
-  'components/graph/DependencyGraph.tsx: BLOCKS',
-  'routes/AutonomyTab.tsx: docs path',
-  'routes/CandidatesPage.tsx: BLOCKS',
-  'routes/FieldsTab.tsx: IQL',
-  'routes/GitHubSettingsTab.tsx: UPPER_SNAKE',
-  'routes/GitHubSettingsTab.tsx: docs path',
-  'routes/HygienePage.tsx: BLOCKS',
-  'routes/HygienePage.tsx: UPPER_SNAKE',
-  'routes/HygienePage.tsx: run_report',
-  'routes/InReviewPage.tsx: IQL',
-  'routes/SearchPage.tsx: IQL',
-]);
+// Empty since INV-2135: every page follows the vocabulary. Do not add entries; fix the text.
+const WORDING_ALLOWLIST = new Set<string>([]);
 
 const TEXT_ATTRIBUTES = new Set(['title', 'aria-label', 'aria-description', 'placeholder', 'hint', 'label', 'body', 'alt']);
 

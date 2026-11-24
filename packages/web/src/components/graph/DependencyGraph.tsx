@@ -185,12 +185,12 @@ export function DependencyGraph({
         {rollup && edges.some((edge) => edge.type === 'BLOCKS') ? (
           <div className="empty-state" role="status">
             <h3>No dependencies between milestones</h3>
-            <p>Every BLOCKS link stays inside one milestone. Turn off “Milestones only” to see them.</p>
+            <p>Every blocking link stays inside one milestone. Turn off “Milestones only” to see them.</p>
           </div>
         ) : (
           <div className="empty-state" role="status">
             <h3>No dependencies in this project</h3>
-            <p>No BLOCKS links touch its work{showOtherLinks ? ', and no other typed links either' : ''}.</p>
+            <p>No blocking links touch its work{showOtherLinks ? ', and no other typed links either' : ''}.</p>
           </div>
         )}
       </div>

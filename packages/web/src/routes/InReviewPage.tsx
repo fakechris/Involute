@@ -320,7 +320,7 @@ export function InReviewPage() {
           {/* The IQL query narrows the list, so it flows with the filters (INV-1311). */}
           <div className="in-review-filter" role="group" aria-label="In Review filter">
             <span className="in-review-filter__label">
-              <IcoFilter size={12} /> IQL / view
+              <IcoFilter size={12} /> Filter query / view
             </span>
             <TextInput
               size="sm"

@@ -736,7 +736,7 @@ export function CandidateCard({
               key={identifier}
               variant="subtle"
               disabled={pendingAction !== null}
-              title={`Record ${identifier} BLOCKS ${candidate.identifier}`}
+              title={`Link: ${identifier} blocks ${candidate.identifier}`}
               onClick={() => void handleRecordBlocker(identifier)}
             >
               {identifier} blocks this

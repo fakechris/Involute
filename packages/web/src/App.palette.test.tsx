@@ -116,8 +116,8 @@ describe('App command palette', () => {
 
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
-    const teamSettings = within(palette).getByRole('button', { name: /Open team settings/ });
-    expect(within(teamSettings).getByText('Open team settings')).toBeInTheDocument();
+    const teamSettings = within(palette).getByRole('button', { name: /Go to team settings/ });
+    expect(within(teamSettings).getByText('Go to team settings')).toBeInTheDocument();
     expect(within(teamSettings).getByText("Current team's settings; agent tokens under Agents")).toBeInTheDocument();
     expect(within(teamSettings).getByText('G A')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Escape' });

@@ -75,7 +75,7 @@ lifecycle (see `docs/actor-model.md`).
 | Team role | Shown as | Can |
 |---|---|---|
 | `VIEWER` | Viewer | read the team's work |
-| `EDITOR` | Member | also create and edit work, comment, claim, commit and review |
+| `EDITOR` | Editor | also create and edit work, comment, claim, commit and review |
 | `OWNER` | Owner | also manage the team: members and roles, name, visibility, archive, workflow states, triage rotation, agent credentials, webhooks, project sharing |
 
 Admins act as Owner of every team without being on the roster.
@@ -88,7 +88,7 @@ Rules:
   Admins change it.
 - Any member can **leave** a team, except its last Owner.
 - A Member (workspace role) can **join a public team** themself as a team
-  Member (`EDITOR`). Private teams are joined only by being added.
+  Editor (`EDITOR`). Private teams are joined only by being added.
 
 ## 4. Visibility
 

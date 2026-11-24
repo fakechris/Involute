@@ -261,7 +261,7 @@ export function BugsPage() {
                     <tbody>
                       {(summary.bySeverity ?? []).map((row) => (
                         <tr key={row.severity ?? '__none__'}>
-                          <td>{row.severity ? severityLabel(row.severity) : 'Not judged'}</td>
+                          <td>{row.severity ? severityLabel(row.severity) : 'No severity'}</td>
                           <td>{row.count}</td>
                         </tr>
                       ))}
@@ -307,7 +307,7 @@ export function BugsPage() {
             </div>
 
             <section className="bugs-panel" aria-label="Bug creation trend">
-              <h2 className="bugs-panel__title">Created per week (last 8 weeks)</h2>
+              <h2 className="bugs-panel__title">Committed bugs, by week created (last 8 weeks)</h2>
               <div className="bugs-trend">
                 {summary.createdPerWeek.map((week) => (
                   <div className="bugs-trend__week" key={week.weekStart}>
@@ -389,13 +389,13 @@ function BugTriageMetrics({ metrics }: { metrics: BugMetricsData }) {
           <StatTile
             tone={metrics.regression.regressedCount ? 'alert' : 'default'}
             value={formatRate(metrics.regression.regressionRate)}
-            label={`Regression rate (${metrics.regression.regressedCount} of ${metrics.regression.deliveredCount} delivered, ${metrics.regression.windowDays}d)`}
+            label={`Regression rate: ${metrics.regression.regressedCount} of ${metrics.regression.deliveredCount} items Done in the last ${metrics.regression.windowDays} days`}
           />
         ) : null}
-        <StatTile to="/candidates?type=bug" value={metrics.untriagedCount} label="Waiting in triage" />
+        <StatTile to="/candidates?type=bug" value={metrics.untriagedCount} label="Candidates waiting for triage" />
         <StatTile
           value={`${formatHours(metrics.triageHoursP50)} / ${formatHours(metrics.triageHoursP90)}`}
-          label={`Triage time p50 / p90 (${metrics.triagedCount} triaged)`}
+          label={`Time to triage, median / 90th percentile (${metrics.triagedCount} triaged)`}
         />
         <StatTile
           value={metrics.slaMetRate === null ? '—' : `${Math.round(metrics.slaMetRate * 100)}%`}
@@ -405,12 +405,12 @@ function BugTriageMetrics({ metrics }: { metrics: BugMetricsData }) {
         <StatTile
           tone={metrics.breachedOpen.length ? 'alert' : 'default'}
           value={`${metrics.breachedOpen.length} / ${metrics.atRiskOpenCount}`}
-          label="Open past SLA / at risk"
+          label="Open bugs past SLA / near the SLA deadline"
         />
         <StatTile
           tone={metrics.unplacedOpenCount ? 'alert' : 'default'}
           value={metrics.unplacedOpenCount}
-          label="Open bugs with no parent (goal 0)"
+          label="Open bugs not in any project tree (goal 0)"
         />
         {metrics.reopenedCount !== undefined ? (
           <StatTile
@@ -447,7 +447,7 @@ function BugTriageMetrics({ metrics }: { metrics: BugMetricsData }) {
           )}
         </section>
         <section className="bugs-panel" aria-label="Bugs by source">
-          <h2 className="bugs-panel__title">Where bugs come from</h2>
+          <h2 className="bugs-panel__title">Source of all bugs ever filed</h2>
           {metrics.bySource.length === 0 ? (
             <p className="bugs-panel__empty">No bugs yet.</p>
           ) : (
@@ -525,7 +525,7 @@ function BugResolutions({ metrics }: { metrics: BugMetricsData }) {
               </tr>
             ))}
             <tr>
-              <td>False-report rate</td>
+              <td>Invalid or not reproducible, share of all reported</td>
               {SOURCES.map((source) => <td key={source} className="mono">{falseRate(source)}</td>)}
             </tr>
           </tbody>
