@@ -68,7 +68,7 @@ export function DialogShell({
     }
     return () => {
       if (returnFocusTo instanceof HTMLElement && returnFocusTo.isConnected) {
-        returnFocusTo.focus();
+        returnFocusTo.focus({ preventScroll: true });
       }
     };
   }, [returnFocusTo]);

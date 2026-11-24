@@ -116,6 +116,18 @@ describe('a link to an issue the board does not list (INV-1469)', () => {
     );
   });
 
+  it('closes from the focused Close button and restores focus to Board for a direct link (INV-2116)', async () => {
+    renderLinkedIssueApp(['/?issue=INV-1446']);
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    const close = within(drawer).getByRole('button', { name: 'Close' });
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(close, { key: 'Escape' });
+
+    expect(drawer).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'All issues' }).closest('main')).toHaveFocus();
+  });
+
   it('shows nothing when the named issue does not exist', async () => {
     renderApp(
       App,

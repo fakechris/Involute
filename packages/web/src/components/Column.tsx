@@ -67,29 +67,13 @@ export function Column({
     collapsed ? 'board-column--collapsed' : '',
   ].filter(Boolean).join(' ');
 
-  if (collapsed) {
-    return (
-      <section
-        className={classNames}
-        aria-label={`${title} column (collapsed)`}
-        data-testid={`board-column-${stateId}`}
-        data-state-id={stateId}
-        onClick={onToggleCollapse}
-      >
-        <div className="board-column__header">
-          <h2>{title}</h2>
-          <span className="board-column__count" title={countTitle}>{total}</span>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <section
       className={classNames}
-      aria-label={`${title} column`}
+      aria-label={`${title} column${collapsed ? ' (collapsed)' : ''}`}
       data-testid={`board-column-${stateId}`}
       data-state-id={stateId}
+      onClick={collapsed ? onToggleCollapse : undefined}
     >
       <div className="board-column__header">
         <h2>{title}</h2>
@@ -98,18 +82,22 @@ export function Column({
           <button
             type="button"
             className="board-column__collapse-toggle"
-            onClick={onToggleCollapse}
-            aria-label={`Collapse ${title} column`}
-            title="Collapse column"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleCollapse();
+            }}
+            aria-expanded={!collapsed}
+            aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${title} column`}
+            title={collapsed ? 'Expand column' : 'Collapse column'}
           >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" transform="rotate(-90 6 6)" />
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" transform={collapsed ? 'rotate(90 6 6)' : 'rotate(-90 6 6)'} />
             </svg>
           </button>
         ) : null}
       </div>
 
-      <SortableContext items={issues.map((issue) => issue.id)} strategy={verticalListSortingStrategy}>
+      {collapsed ? null : <SortableContext items={issues.map((issue) => issue.id)} strategy={verticalListSortingStrategy}>
         <div
           ref={setNodeRef}
           className="board-column__body"
@@ -173,7 +161,7 @@ export function Column({
             </div>
           ) : null}
         </div>
-      </SortableContext>
+      </SortableContext>}
     </section>
   );
 }
