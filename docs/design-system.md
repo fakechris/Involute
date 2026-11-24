@@ -77,7 +77,7 @@
     - 指令句不超过 20 个词，说明句不超过 25 个词；名词串不超过 3 个词。
     - 标签说出数字真正数的是什么：取消的 bug 也算时写 `Closed within SLA`，不写 `Fixed`；任何附件都算时写 `Postmortem file`。
     - 缩写第一次出现时展开（`Mean time to resolve (MTTR)`）。状态名按原文大小写。
-    - 界面不出现：工具 / API 名（`run_report`、`workReview`）、枚举与环境变量（`DERIVED_FROM`、`BLOCKS`、`ADMIN`、`INVOLUTE_SECRET_KEY`）、内部词（needinfo、kernel、rounds、lease、episode）、工单号（`(INV-123)` 写在代码注释里）、仓库路径（`docs/*.md`）、`IQL`（写 filter query）。`design-guard.test.ts` 在 CI 检查 JSX 文本与 `title` / `aria-label` / `placeholder` / `hint` / `label` / `body` / `alt`；现存的例外列在 `WORDING_ALLOWLIST`，由 INV-2135 清空，只能减少。
+    - 界面不出现：工具 / API 名（`run_report`、`workReview`）、枚举与环境变量（`DERIVED_FROM`、`BLOCKS`、`ADMIN`、`INVOLUTE_SECRET_KEY`）、内部词（needinfo、kernel、rounds、lease、episode）、工单号（`(INV-123)` 写在代码注释里）、仓库路径（`docs/*.md`）、`IQL`（写 filter query）。`design-guard.test.ts` 在 CI 检查 JSX 文本与 `title` / `aria-label` / `placeholder` / `hint` / `label` / `body` / `alt`；`WORDING_ALLOWLIST` 已清空（INV-2135），不要再加条目——改文字。
 
     **受控词汇表**
 
@@ -95,8 +95,8 @@
     | agent 问人 | **Question** / **Ask for information** | needinfo |
     | 通知列表 | **Activity** | Inbox |
     | 等你决定的列表 | **Needs you** | todo、What needs you |
-    | 团队角色 EDITOR | **Editor** | Member（Member 只指工作区角色） |
-    | 自治级别 | **L0–L3**（附名称） | 信任级别不用 L1–L3 |
+    | 团队角色 EDITOR | **Editor** | Member（Member 只指工作区角色 USER） |
+    | 自治级别与 agent 信任级别 | **L0–L3** 同一刻度：信任 L*n* 的 agent 在允许 L*n* 的项目里才自动通过；首次出现附名称 | 不用另一套编号 |
     | 工作的负责人 | **Assignee** | Owner（Owner 只指团队 Owner 与 Human owner） |
     | 工作的种类 | **Kind**（Issue / Epic / Decision …） | Type（Type 只指 Bug / Feature / Improvement / Research / Incident） |
 

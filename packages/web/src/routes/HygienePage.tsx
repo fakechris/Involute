@@ -29,7 +29,7 @@ export function HygienePage() {
 
   return (
     <div className="observation-page">
-      <PageHeader title="Work graph health" hint={`Team ${teamKey} · committed work against norm v1`} />
+      <PageHeader title="Work health" hint={`Team ${teamKey} · committed work checked against the work graph rules`} />
       <PageBody width="wide">
         {error ? (
           <div role="alert">
@@ -47,11 +47,11 @@ export function HygienePage() {
               {[
                 ['Not in any project tree', hygiene.unplacedCount],
                 ['Mentions without a link', hygiene.unlinkedMentionCount],
-                ['Dependencies without BLOCKS', hygiene.dependencyWithoutBlocksCount],
+                ['Dependencies not linked as blocking', hygiene.dependencyWithoutBlocksCount],
                 ['Research with nothing derived', hygiene.researchWithoutDownstreamCount],
                 ['Research ready to close', hygiene.researchClosableCount],
                 ['Research without an attachment', hygiene.researchWithoutAttachmentCount],
-                ['In Review with nothing to open', hygiene.reviewWithoutDeliveryLinksCount],
+                ['In Review with no commit, PR or evidence', hygiene.reviewWithoutDeliveryLinksCount],
                 ['Incidents without follow-ups', hygiene.incidentsWithoutDownstreamCount],
                 ['SEV1/SEV2 incidents with no file attached', hygiene.incidentsWithoutPostmortemCount],
                 ['Overdue incident follow-ups', hygiene.overdueFollowUpCount],
@@ -70,8 +70,8 @@ export function HygienePage() {
               </ul>
             </section>
 
-            <section aria-label="Dependencies without BLOCKS">
-              <h2>Dependencies without BLOCKS · {hygiene.dependencyWithoutBlocksCount}</h2>
+            <section aria-label="Dependencies not linked as blocking">
+              <h2>Dependencies not linked as blocking · {hygiene.dependencyWithoutBlocksCount}</h2>
               <p className="observation-hint">The text reads like one depends on the other. Record it if it is true; ignore it if the mention is only an example.</p>
               {linkError ? <InlineError>{linkError}</InlineError> : null}
               <ul className="list-rows">
@@ -110,7 +110,7 @@ export function HygienePage() {
 
             <section aria-label="Research with nothing derived">
               <h2>Research with nothing derived · {hygiene.researchWithoutDownstreamCount}</h2>
-              <p className="observation-hint">Finished research should lead somewhere: propose its actionable points and "won't do" decisions DERIVED_FROM it, or state "no actionable points".</p>
+              <p className="observation-hint">Finished research should lead somewhere: propose its actionable points and "won't do" decisions as derived from it, or write "no actionable points" (无可执行点) in its description.</p>
               <ul className="list-rows">
                 {hygiene.researchWithoutDownstream.map((item) => (
                   <IssueRow open="drawer" key={item.id} issue={item} />
@@ -138,9 +138,9 @@ export function HygienePage() {
               </ul>
             </section>
 
-            <section aria-label="In Review with nothing to open">
-              <h2>In Review with nothing to open · {hygiene.reviewWithoutDeliveryLinksCount}</h2>
-              <p className="observation-hint">Code work waiting for review with no commit, pull request, URL or evidence, so the person accepting it cannot see what was done. Report the commit and PR on a run, or attach a link (agents: run_report commit_sha + pr_number, evidence attach). It leaves this list once one appears.</p>
+            <section aria-label="In Review with no commit, PR or evidence">
+              <h2>In Review with no commit, PR or evidence · {hygiene.reviewWithoutDeliveryLinksCount}</h2>
+              <p className="observation-hint">The person who accepts this work cannot see what was done. Add the commit and PR to a run, or attach a link. The item leaves this list when one appears.</p>
               <ul className="list-rows">
                 {hygiene.reviewWithoutDeliveryLinks.map((item) => (
                   <IssueRow open="drawer" key={item.id} issue={item} />

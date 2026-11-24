@@ -35,7 +35,7 @@ type WorkspaceRole = 'ADMIN' | 'USER' | 'GUEST';
 type TeamRole = 'VIEWER' | 'EDITOR' | 'OWNER';
 
 const ROLE_LABEL: Record<WorkspaceRole, string> = { ADMIN: 'Admin', USER: 'Member', GUEST: 'Guest' };
-const TEAM_ROLE_LABEL: Record<TeamRole, string> = { VIEWER: 'Viewer', EDITOR: 'Member', OWNER: 'Owner' };
+const TEAM_ROLE_LABEL: Record<TeamRole, string> = { VIEWER: 'Viewer', EDITOR: 'Editor', OWNER: 'Owner' };
 const STATUS_LABEL: Record<string, string> = { ACTIVE: 'Active', PENDING: 'Pending invite', SUSPENDED: 'Suspended' };
 
 interface AdminPerson {
@@ -545,13 +545,13 @@ function SecurityForm({ data, onSaved }: { data: SecurityData; onSaved: () => vo
       <div className="form-stack">
         <Field
           label="Approved email domains"
-          hint="Anyone with a verified Google account on these domains can sign in and joins as a Member. One per line, e.g. company.com."
+          hint="Anyone with a verified Google account on these domains can sign in. They join the workspace with the Member role. One per line, e.g. company.com."
         >
           <TextArea aria-label="Approved email domains" rows={3} value={domains} onChange={(e) => setDomains(e.target.value)} />
         </Field>
         <fieldset className="settings-fieldset">
           <legend className="field__label">Default teams</legend>
-          <span className="field__hint">People who join by domain are added to these teams as Members.</span>
+          <span className="field__hint">People who join by domain are added to these teams as Editors.</span>
           <div className="checkbox-group">
             {data.teams.nodes.map((team) => (
               <Checkbox

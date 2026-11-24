@@ -3,6 +3,7 @@ import { gql } from '@apollo/client';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useNavigate } from 'react-router-dom';
 
+import { formatNotificationType } from '../work/notification-labels';
 import { IcoBell } from './Icons';
 
 const UNREAD_COUNT_QUERY = gql`
@@ -166,7 +167,7 @@ export function NotificationsBell({ authenticated }: { authenticated: boolean })
           {listQuery.loading && items.length === 0 ? (
             <div className="notif-bell__empty">Loading…</div>
           ) : items.length === 0 ? (
-            <div className="notif-bell__empty">Nothing yet. Decisions requested by agents land here.</div>
+            <div className="notif-bell__empty">No activity yet. Decisions that wait for you are in Needs you.</div>
           ) : (
             <ul className="notif-bell__list">
               {items.map((item) => (
@@ -176,13 +177,13 @@ export function NotificationsBell({ authenticated }: { authenticated: boolean })
                     className={`notif-bell__item${item.readAt ? '' : ' notif-bell__item--unread'}`}
                     onClick={() => openItem(item)}
                   >
-                    <span className="notif-bell__item-type">{item.type}</span>
+                    <span className="notif-bell__item-type">{formatNotificationType(item.type)}</span>
                     {item.work ? (
                       <span className="notif-bell__item-title">
                         [{item.work.identifier}] {item.work.title}
                       </span>
                     ) : (
-                      <span className="notif-bell__item-title">{item.type}</span>
+                      <span className="notif-bell__item-title">{formatNotificationType(item.type)}</span>
                     )}
                   </button>
                 </li>

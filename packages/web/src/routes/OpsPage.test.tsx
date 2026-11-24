@@ -107,6 +107,6 @@ describe('the ops page (INV-796)', () => {
   it('tells a non-admin the page is not for them when the server refuses', async () => {
     refused = true;
     renderPage();
-    expect(await screen.findByText('The ops page is for workspace admins.')).toBeInTheDocument();
+    expect(await screen.findByText('Operations is for workspace admins.')).toBeInTheDocument();
   });
 });

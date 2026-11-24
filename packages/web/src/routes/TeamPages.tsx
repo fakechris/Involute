@@ -31,7 +31,7 @@ import { EmptyState, InlineError, LoadingState } from '../components/status';
 // settings live under the team, not scattered across the workspace.
 
 type TeamRole = 'VIEWER' | 'EDITOR' | 'OWNER';
-const TEAM_ROLE_LABEL: Record<TeamRole, string> = { VIEWER: 'Viewer', EDITOR: 'Member', OWNER: 'Owner' };
+const TEAM_ROLE_LABEL: Record<TeamRole, string> = { VIEWER: 'Viewer', EDITOR: 'Editor', OWNER: 'Owner' };
 
 interface TeamPageTeam {
   id: string;

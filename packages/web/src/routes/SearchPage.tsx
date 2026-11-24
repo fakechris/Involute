@@ -153,9 +153,9 @@ export function SearchPage() {
               size="sm"
               key={filters.iql}
               className="search-box__iql"
-              aria-label="IQL filter"
+              aria-label="Filter query"
               aria-describedby={showIqlHint ? 'search-iql-hint' : undefined}
-              placeholder="IQL, e.g. assignee:me priority:1"
+              placeholder="Filter query, e.g. assignee:me priority:1"
               defaultValue={filters.iql}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') update({ iql: event.currentTarget.value });
@@ -164,7 +164,7 @@ export function SearchPage() {
             />
             {showIqlHint ? (
               <p id="search-iql-hint" className="observation-hint" role="status">
-                IQL only refines a keyword search. Add a keyword, or{' '}
+                A filter query only narrows a keyword search. Add a keyword, or{' '}
                 <Link to={`/backlog?${backlogParams}`}>view committed work in Backlog with these filters</Link>.
               </p>
             ) : null}

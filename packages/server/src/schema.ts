@@ -705,7 +705,7 @@ const typeDefs = /* GraphQL */ `
     teamUpdate(input: TeamUpdateInput!): TeamLifecyclePayload!
     teamArchive(teamId: String!): TeamLifecyclePayload!
     teamUnarchive(teamId: String!): TeamLifecyclePayload!
-    """Join a public team as a Member."""
+    """Join a public team as an Editor."""
     teamJoin(teamId: String!): TeamLifecyclePayload!
     """Leave a team; its last Owner cannot."""
     teamLeave(teamId: String!): TeamLifecyclePayload!

@@ -104,8 +104,8 @@ describe('App keyboard shortcuts and help dialog', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' });
     expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByText('Navigation (G Chords)')).toBeInTheDocument();
-    expect(within(dialog).getByText('Global Actions')).toBeInTheDocument();
+    expect(within(dialog).getByText('Go to (press G, then a key)')).toBeInTheDocument();
+    expect(within(dialog).getByText('Actions')).toBeInTheDocument();
     expect(within(dialog).getByText('Board & Backlog Navigation')).toBeInTheDocument();
 
     // Close via Escape

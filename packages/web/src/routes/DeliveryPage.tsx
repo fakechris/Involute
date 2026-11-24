@@ -191,7 +191,7 @@ function age(work: Work): number | null {
   return known.length ? Math.max(...known) : null;
 }
 function emptyReason(metric: Metric) {
-  return metric.emptyReason === 'INSUFFICIENT_HISTORY' ? 'Insufficient history for this metric.' : 'No accepted episodes in this window.';
+  return metric.emptyReason === 'INSUFFICIENT_HISTORY' ? 'Insufficient history for this metric.' : 'No item was accepted in this period.';
 }
 
 export function DeliveryPage() {
@@ -414,16 +414,15 @@ export function DeliveryPage() {
             </StatRow>
             {lowCoverage ? (
               <p>
-                <Badge tone="warn">Low coverage</Badge> Interpret cautiously: fewer than 5 samples per metric, missing values,
-                no history or unknown episodes. {rows.map((row) => `${row.label}: ${row.metric.coverage.missingCount} missing`).join(' · ')}
+                <Badge tone="warn">Low coverage</Badge> Use with care: fewer than 5 samples, or some history is missing. {rows.map((row) => `${row.label}: ${row.metric.coverage.missingCount} missing`).join(' · ')}
               </p>
             ) : null}
             <p>
-              Works: {data.coverage.workCount} · No history: {data.coverage.noHistoryCount} · Open: {data.coverage.openEpisodeCount}
+              Items: {data.coverage.workCount} · No history: {data.coverage.noHistoryCount} · Open: {data.coverage.openEpisodeCount}
               {' · '}Closed without acceptance: {data.coverage.closedWithoutAcceptanceCount} · Unknown: {data.coverage.unknownEpisodeCount}
             </p>
             <section aria-label="Latency percentile chart">
-              <h2>Completed sample percentiles</h2>
+              <h2>Accepted items: P50 / P90</h2>
               {rows.flatMap(({ key, label, sample: next, metric }) =>
                 (['p50Ms', 'p90Ms'] as const).map((percentile) => (
                   <button
@@ -455,7 +454,7 @@ export function DeliveryPage() {
               />
             </section>
             <Btn variant="subtle" onClick={() => select('OPEN')}>
-              Open items
+              Show open items
             </Btn>
             {sample ? (
               <section aria-label="Delivery drill-down">
@@ -477,7 +476,7 @@ export function DeliveryPage() {
                         detail={
                           <>
                             Run wall-clock (not work time): sum {duration(work.runs.wallClockSumMs)} · union{' '}
-                            {duration(work.runs.wallClockUnionMs)}. Human actual time: Unknown · Agent actual time: Unknown
+                            {duration(work.runs.wallClockUnionMs)}
                           </>
                         }
                       />

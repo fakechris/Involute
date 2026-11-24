@@ -295,6 +295,9 @@ function TweaksPanel({
   );
 }
 
+// The workspace role in words (docs/permissions.md); USER is shown as Member.
+const WORKSPACE_ROLE_WORDS: Record<string, string> = { ADMIN: 'Admin', USER: 'Member', GUEST: 'Guest' };
+
 export function App() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -737,7 +740,7 @@ export function App() {
       },
       {
         id: 'go-hygiene',
-        label: 'Go to work graph health',
+        label: 'Go to work health',
         description: 'Unplaced work, unlinked mentions, dependencies without BLOCKS, research with nothing derived',
         group: 'Navigation',
         shortcut: 'G H',
@@ -902,7 +905,7 @@ export function App() {
     if (session?.authenticated) {
       actions.push({
         id: 'go-access',
-        label: 'Open team settings',
+        label: 'Go to team settings',
         description: "Current team's settings; agent tokens under Agents",
         group: 'Navigation',
         shortcut: 'G A',
@@ -1058,9 +1061,9 @@ export function App() {
               <span className="app-shell__link-label">Graph</span>
               <kbd className="app-shell__link-kbd" aria-hidden="true">G R</kbd>
             </NavLink>
-            <NavLink to="/hygiene" className={getNavLinkClassName} title="Go to work graph health · G H">
+            <NavLink to="/hygiene" className={getNavLinkClassName} title="Go to work health · G H">
               <span className="app-shell__nav-icon"><IcoCheck size={14} /></span>
-              <span className="app-shell__link-label">Health</span>
+              <span className="app-shell__link-label">Work health</span>
               <kbd className="app-shell__link-kbd" aria-hidden="true">G H</kbd>
             </NavLink>
             <NavLink to="/inbox" className={getNavLinkClassName} title="Go to Activity · G I">
@@ -1120,7 +1123,7 @@ export function App() {
               {session?.viewer?.globalRole === 'ADMIN' ? (
                 <NavLink to="/ops" className={getNavLinkClassName} title="Go to Ops: sync, webhooks, traceability">
                   <span className="app-shell__nav-icon"><IcoSettings size={14} /></span>
-                  <span className="app-shell__link-label">Ops</span>
+                  <span className="app-shell__link-label">Operations</span>
                 </NavLink>
               ) : null}
             </nav>
@@ -1259,7 +1262,7 @@ export function App() {
                 <Avatar user={session.viewer.name ? { name: session.viewer.name } : null} size={24} />
                 <div className="app-shell__footer-user">
                   <div className="app-shell__footer-name">{session.viewer.name ?? session.viewer.email ?? 'Signed-in viewer'}</div>
-                  <div className="app-shell__footer-role">{session.viewer.globalRole}</div>
+                  <div className="app-shell__footer-role">{WORKSPACE_ROLE_WORDS[session.viewer.globalRole] ?? session.viewer.globalRole}</div>
                 </div>
                 <span className="app-shell__footer-settings-hint" title="Settings">
                   <IcoSettings size={14} />

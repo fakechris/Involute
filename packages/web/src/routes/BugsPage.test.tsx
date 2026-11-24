@@ -176,7 +176,7 @@ function LocationState() {
 describe('BugsPage', () => {
   it('renders the regression rate and delivery distributions (INV-752)', () => {
     render(<MemoryRouter><BugsPage /></MemoryRouter>);
-    expect(screen.getByLabelText('Triage and SLA')).toHaveTextContent('25%Regression rate (1 of 4 delivered, 30d)');
+    expect(screen.getByLabelText('Triage and SLA')).toHaveTextContent('25%Regression rate: 1 of 4 items Done in the last 30 days');
     expect(screen.getByLabelText('Regressions by project')).toHaveTextContent('Regression QA project4125%');
     const distribution = screen.getByRole('region', { name: 'Regression distribution by project' });
     expect(distribution).toHaveClass('bugs-table-scroll');
@@ -191,12 +191,12 @@ describe('BugsPage', () => {
       </MemoryRouter>,
     );
     const triage = screen.getByLabelText('Triage and SLA');
-    expect(triage).toHaveTextContent('2Waiting in triage');
-    expect(triage).toHaveTextContent('3.5h / 3dTriage time p50 / p90 (4 triaged)');
+    expect(triage).toHaveTextContent('2Candidates waiting for triage');
+    expect(triage).toHaveTextContent('3.5h / 3dTime to triage, median / 90th percentile (4 triaged)');
     expect(triage).toHaveTextContent('75%Closed within SLA (3 of 4 closed)');
-    expect(triage).toHaveTextContent('1 / 1Open past SLA / at risk');
-    expect(triage).toHaveTextContent('1Open bugs with no parent (goal 0)');
-    expect(within(triage).getByRole('link', { name: /Waiting in triage/ })).toHaveAttribute('href', '/candidates?type=bug');
+    expect(triage).toHaveTextContent('1 / 1Open bugs past SLA / near the SLA deadline');
+    expect(triage).toHaveTextContent('1Open bugs not in any project tree (goal 0)');
+    expect(within(triage).getByRole('link', { name: /Candidates waiting for triage/ })).toHaveAttribute('href', '/candidates?type=bug');
     const breaches = screen.getByLabelText('Open bugs past their SLA');
     expect(breaches).toHaveTextContent('INV-30');
     expect(breaches).toHaveTextContent('5.5h over');
@@ -226,7 +226,7 @@ describe('BugsPage', () => {
       'ResolutionReported by peopleFiled by agentsOther',
       "Won't do100",
       'Invalid (not a real problem)010',
-      'False-report rate0%50%—',
+      'Invalid or not reproducible, share of all reported0%50%—',
     ]);
   });
 

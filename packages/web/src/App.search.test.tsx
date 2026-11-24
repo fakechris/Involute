@@ -34,10 +34,10 @@ function searchVariables() {
 describe('Search page (INV-926)', () => {
   it('explains IQL-only submission and hides the hint when a keyword is entered (INV-1946)', async () => {
     renderApp({ data: boardQueryResult, loading: false, searchData }, ['/search?project=fakechris/lumenbox']);
-    const hint = /IQL only refines a keyword search\. Add a keyword/;
+    const hint = /A filter query only narrows a keyword search\. Add a keyword/;
     expect(screen.queryByText(hint)).not.toBeInTheDocument();
 
-    const iqlInput = await screen.findByLabelText('IQL filter');
+    const iqlInput = await screen.findByLabelText('Filter query');
     fireEvent.change(iqlInput, { target: { value: 'assignee:me priority:2' } });
     fireEvent.keyDown(iqlInput, { key: 'Enter' });
     fireEvent.submit(screen.getByRole('search'));
@@ -62,7 +62,7 @@ describe('Search page (INV-926)', () => {
   it('does not show the IQL-only hint for a keyword search with IQL', async () => {
     renderApp({ data: boardQueryResult, loading: false, searchData }, ['/search?q=审批&iql=priority:2']);
     expect(await screen.findByRole('list', { name: 'Search results' })).toBeInTheDocument();
-    expect(screen.queryByText(/IQL only refines a keyword search/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/A filter query only narrows a keyword search/)).not.toBeInTheDocument();
   });
 
   it('turns kind, state and label into the IQL work_search takes', () => {

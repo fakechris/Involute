@@ -116,7 +116,7 @@ function WorkspaceAutonomyForm({ data, onSaved }: { data: AutonomySettingsData; 
   return (
     <section aria-label="Autonomy">
       <SettingsSectionHeader title="Autonomy">
-        How far agents may go on their own. Teams pick a level up to the ceiling; a project may override its team. Levels are described in docs/autonomy-policy.md; nothing below changes a decision already waiting for you.
+        How far agents may go on their own. Each team picks a level up to the workspace ceiling, and a project may set its own. A change here does not affect decisions already waiting for you.
       </SettingsSectionHeader>
       <NoticeLine notice={notice} />
       {settings.paused ? (

@@ -38,7 +38,7 @@ const hygieneData: WorkHygieneQueryData = {
 describe('work graph health page (INV-721)', () => {
   it('shows the four counts and the items behind them', async () => {
     renderApp(App, { data: boardQueryResult, loading: false, hygieneData }, ['/hygiene']);
-    expect(await screen.findByRole('heading', { name: 'Work graph health' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Work health' })).toBeInTheDocument();
     const summary = screen.getByLabelText('Summary');
     expect(summary).toHaveTextContent('2Not in any project tree');
     expect(summary).toHaveTextContent('1Research with nothing derived');
@@ -70,8 +70,8 @@ describe('work graph health page (INV-721)', () => {
     const summary = await screen.findByLabelText('Summary');
     expect(summary).toHaveTextContent('1Research without an attachment');
     expect(within(screen.getByRole('region', { name: 'Research without an attachment' })).getByText('INV-1140')).toBeInTheDocument();
-    expect(summary).toHaveTextContent('1In Review with nothing to open');
-    expect(within(screen.getByRole('region', { name: 'In Review with nothing to open' })).getByText('INV-1553')).toBeInTheDocument();
+    expect(summary).toHaveTextContent('1In Review with no commit, PR or evidence');
+    expect(within(screen.getByRole('region', { name: 'In Review with no commit, PR or evidence' })).getByText('INV-1553')).toBeInTheDocument();
   });
 
   it('explains both ways to resolve a missing incident follow-up in English (INV-2122)', async () => {
@@ -103,7 +103,7 @@ describe('work graph health page (INV-721)', () => {
     });
     renderApp(App, { data: boardQueryResult, loading: false, hygieneData }, ['/hygiene']);
     fireEvent.click(await screen.findByRole('button', { name: 'INV-420 blocks INV-439' }));
-    const region = screen.getByRole('region', { name: 'Dependencies without BLOCKS' });
+    const region = screen.getByRole('region', { name: 'Dependencies not linked as blocking' });
     expect(await within(region).findByRole('alert')).toHaveTextContent('This would create a cycle.');
   });
 
@@ -112,6 +112,6 @@ describe('work graph health page (INV-721)', () => {
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 'h' });
-    expect(await screen.findByRole('heading', { name: 'Work graph health' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Work health' })).toBeInTheDocument();
   });
 });

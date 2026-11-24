@@ -104,7 +104,7 @@ export function IncidentsPage() {
             title="No incidents"
             body={
               <>
-                Declared incidents (Type: Incident) appear here with their MTTR, MTTM and follow-up progress. Declare one from the board with
+                Declared incidents (Type: Incident) appear here with their time to resolve, time to mitigate and follow-up progress. Declare one from the board with
                 Report incident.
                 {summary.excludedCount > 0 ? ` ${summary.excludedCount} declined or duplicate incidents are not counted.` : null}
               </>
@@ -118,12 +118,12 @@ export function IncidentsPage() {
               <StatTile
                 title="Mean time from impact start to mitigation (resolution when mitigation was not recorded)"
                 value={formatAverage(summary.mttmHours, summary.mttmSampleCount)}
-                label="MTTM"
+                label="Mean time to mitigate (MTTM)"
               />
               <StatTile
                 title="Mean time from impact start to resolution"
                 value={formatAverage(summary.mttrHours, summary.mttrSampleCount)}
-                label="MTTR"
+                label="Mean time to resolve (MTTR)"
               />
             </StatRow>
 
