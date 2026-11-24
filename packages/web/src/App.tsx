@@ -12,6 +12,7 @@ import { IssueDrawerHost } from './components/IssueDrawerHost';
 import { ShellTeamsSync } from './app/ShellTeamsSync';
 import { SignInPage } from './app/SignInPage';
 import { ImageHostConfig } from './components/ImageHostConfig';
+import { SessionEndedContext, SessionEndedNotice } from './components/SessionEndedNotice';
 import { useSavedViewsSync } from './app/useSavedViewsSync';
 import { Avatar } from './components/Primitives';
 import {
@@ -982,7 +983,12 @@ export function App() {
     theme,
   ]);
 
-  return (
+  const provider = session?.authProviders[0];
+  const expiredSessionSignInUrl = provider
+    ? getProviderLoginUrl(provider.startUrl)
+    : session?.googleOAuthConfigured ? getGoogleLoginUrl() : null;
+
+  const shell = (
     <div className={`app-shell${isMobileNavOpen ? ' app-shell--nav-open' : ''}`}>
       {isMobileNavOpen ? (
         <button
@@ -1482,24 +1488,7 @@ export function App() {
         </div>
       </div>
 
-      {sessionExpired ? (
-        <div className="page-notice page-notice--floating" role="alert">
-          {session?.authProviders[0] || session?.googleOAuthConfigured ? (
-            <>
-              <p className="page-notice__text">Your session ended. Copy any unsaved text before you sign in.</p>
-              <a
-                className="ui-action ui-action--accent ui-action--sm"
-                href={session.authProviders[0] ? getProviderLoginUrl(session.authProviders[0].startUrl) : getGoogleLoginUrl()}
-                onClick={rememberSignInReturn}
-              >
-                Sign in
-              </a>
-            </>
-          ) : (
-            <p className="page-notice__text">Your session ended. Contact your workspace admin to sign in.</p>
-          )}
-        </div>
-      ) : null}
+      <SessionEndedNotice floating />
 
       {/* The sidebar's team list comes from the server, not only from the last board visit (INV-853). */}
       {session?.authenticated ? <ShellTeamsSync /> : null}
@@ -1539,6 +1528,8 @@ export function App() {
       <CommentUndoHost />
     </div>
   );
+
+  return <SessionEndedContext.Provider value={sessionExpired ? expiredSessionSignInUrl : undefined}>{shell}</SessionEndedContext.Provider>;
 }
 
 export { CommandPalette } from './app/CommandPalette';

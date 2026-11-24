@@ -115,15 +115,19 @@ describe('expired session query failures', () => {
     expect(screen.queryByText(/Your session ended/i)).not.toBeInTheDocument();
     expired = true;
 
-    const prompt = await screen.findByText('Your session ended. Copy any unsaved text before you sign in.');
+    const prompt = await within(dialog).findByText('Your session ended. Copy any unsaved text before you sign in.');
     expect(within(prompt.parentElement!).getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', expect.stringContaining('/auth/google/start'));
     expect(screen.getByRole('dialog', { name: 'Edit issue' })).toBe(dialog);
     expect(draft).toHaveValue('Unsaved description');
     expect(draft).toHaveFocus();
+
+    fireEvent.keyDown(draft, { key: 'Tab' });
+    expect(within(dialog).getByRole('link', { name: 'Sign in' })).toHaveFocus();
   });
 
   it('keeps a Board bug draft when tab return discovers expiry and skips later refreshes', async () => {
     window.history.replaceState(null, '', '/?team=INV');
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now());
     let expired = false;
     const board = vi.fn(() => expired ? httpAuthError() : Response.json({
       data: {
@@ -146,12 +150,14 @@ describe('expired session query failures', () => {
     expired = true;
     fireEvent.focus(window);
 
-    await screen.findByText('Your session ended. Copy any unsaved text before you sign in.');
+    await screen.findByText('Your session ended. Copy any unsaved text before you sign in.', {
+      selector: '.page-notice--floating .page-notice__text',
+    });
     expect(board).toHaveBeenCalledTimes(initialRequests + 1);
     expect(screen.getByRole('dialog', { name: 'Report bug drawer' })).toBe(dialog);
     expect(draft).toHaveValue('Unsaved bug title');
 
-    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + FOCUS_REFETCH_MIN_INTERVAL_MS);
+    clock.mockReturnValue(Date.now() + FOCUS_REFETCH_MIN_INTERVAL_MS);
     fireEvent.focus(window);
     expect(board).toHaveBeenCalledTimes(initialRequests + 1);
   });

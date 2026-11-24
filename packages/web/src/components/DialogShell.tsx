@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type FormHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from 'react';
 
 import { Btn } from './Primitives';
+import { SessionEndedNotice } from './SessionEndedNotice';
 
 const FOCUSABLE = [
   'a[href]',
@@ -122,6 +123,7 @@ export function DialogShell({
         onClick={onClose}
       />
       <section className="dialog-shell__frame" ref={frameRef} tabIndex={-1}>
+        <SessionEndedNotice />
         <header className="dialog-shell__header">
           <div className="dialog-shell__heading">
             {eyebrow ? <p className="dialog-shell__eyebrow">{eyebrow}</p> : null}
