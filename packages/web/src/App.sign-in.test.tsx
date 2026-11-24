@@ -30,15 +30,15 @@ vi.mock('./routes/IssuePage', async () => {
 function renderApp(
   session: 'signed-out' | 'signed-in',
   graphql: (operation: string, variables: { query?: string }) => Response | Promise<Response>,
-  provider: AuthProviderDescriptor = { id: 'google', startUrl: '/auth/google/start', label: 'Sign in with Google' },
+  provider: AuthProviderDescriptor | null = { id: 'google', startUrl: '/auth/google/start', label: 'Sign in with Google' },
 ) {
   vi.stubGlobal('fetch', vi.fn(async (req: string, init?: RequestInit) => {
     if (req.endsWith('/auth/session')) return Response.json({
       authMode: session === 'signed-in' ? 'session' : 'none',
       authenticated: session === 'signed-in',
       viewer: session === 'signed-in' ? { id: 'viewer-1', email: 'viewer@example.test', name: 'Viewer', globalRole: 'USER' } : null,
-      authProviders: [provider],
-      googleOAuthConfigured: provider.id === 'google',
+      authProviders: provider ? [provider] : [],
+      googleOAuthConfigured: provider?.id === 'google',
     }, { status: session === 'signed-in' ? 200 : 401 });
     const { operationName, variables } = JSON.parse(String(init?.body ?? '{}'));
     return graphql(operationName ?? '', variables ?? {});
@@ -134,6 +134,8 @@ describe('expired session query failures', () => {
     expired = true;
 
     const prompt = await within(dialog).findByText('Your session ended. Copy any unsaved text before you sign in.');
+    expect(screen.getAllByText(prompt.textContent!)).toEqual([prompt]);
+    expect(within(dialog).getByRole('alert')).toContainElement(prompt);
     expect(within(prompt.parentElement!).getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', expect.stringContaining('/auth/google/start'));
     expect(screen.getByRole('dialog', { name: 'Edit issue' })).toBe(dialog);
     expect(draft).toHaveValue('Unsaved description');
@@ -141,6 +143,10 @@ describe('expired session query failures', () => {
 
     fireEvent.keyDown(draft, { key: 'Tab' });
     expect(within(dialog).getByRole('link', { name: 'Sign in' })).toHaveFocus();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Edit issue' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('alert')).getByText(prompt.textContent!)).toBeVisible();
   });
 
   it('keeps a Board bug draft when tab return discovers expiry and skips later refreshes', async () => {
@@ -158,9 +164,8 @@ describe('expired session query failures', () => {
     expired = true;
     fireEvent.focus(window);
 
-    await screen.findByText('Your session ended. Copy any unsaved text before you sign in.', {
-      selector: '.page-notice--floating .page-notice__text',
-    });
+    const prompt = await within(dialog).findByText('Your session ended. Copy any unsaved text before you sign in.');
+    expect(screen.getAllByText(prompt.textContent!)).toEqual([prompt]);
     expect(board).toHaveBeenCalledTimes(initialRequests + 1);
     expect(screen.getByRole('dialog', { name: 'Report bug drawer' })).toBe(dialog);
     expect(draft).toHaveValue('Unsaved bug title');
@@ -184,6 +189,22 @@ describe('expired session query failures', () => {
     expect(await screen.findByText('Your session ended. Sign in to load this view.')).toBeVisible();
     expect(board).toHaveBeenCalledWith('superseded:yes -state-type:canceled,completed');
     expect(screen.queryByRole('button', { name: 'Report bug' })).not.toBeInTheDocument();
+  });
+
+  it('warns people to copy unsaved text when no sign-in provider is configured', async () => {
+    window.history.replaceState(null, '', '/candidates');
+    let finishRequest!: () => void;
+    const gate = new Promise<void>((resolve) => { finishRequest = resolve; });
+    renderApp('signed-in', async () => {
+      await gate;
+      return codedAuthError();
+    }, null);
+    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeVisible();
+    finishRequest();
+
+    const prompt = await screen.findByText('Your session ended. Copy any unsaved text, then contact your workspace admin to sign in.');
+    expect(prompt).toBeVisible();
+    expect(within(prompt.parentElement!).queryByRole('link')).not.toBeInTheDocument();
   });
 
   it('uses the DingTalk session notice and saves the failed Board filter as the sign-in destination', async () => {

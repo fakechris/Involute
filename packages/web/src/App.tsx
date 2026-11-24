@@ -12,7 +12,7 @@ import { IssueDrawerHost } from './components/IssueDrawerHost';
 import { ShellTeamsSync } from './app/ShellTeamsSync';
 import { SignInPage } from './app/SignInPage';
 import { ImageHostConfig } from './components/ImageHostConfig';
-import { SessionEndedContext, SessionEndedNotice } from './components/SessionEndedNotice';
+import { SessionEndedNotice, SessionEndedProvider } from './components/SessionEndedNotice';
 import { useSavedViewsSync } from './app/useSavedViewsSync';
 import { Avatar } from './components/Primitives';
 import {
@@ -1529,7 +1529,7 @@ export function App() {
     </div>
   );
 
-  return <SessionEndedContext.Provider value={sessionExpired ? expiredSessionSignInUrl : undefined}>{shell}</SessionEndedContext.Provider>;
+  return <SessionEndedProvider signInUrl={sessionExpired ? expiredSessionSignInUrl : undefined}>{shell}</SessionEndedProvider>;
 }
 
 export { CommandPalette } from './app/CommandPalette';
