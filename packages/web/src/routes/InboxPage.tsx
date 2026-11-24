@@ -295,7 +295,7 @@ export function InboxPage() {
                 unread={isUnread}
                 onClick={() => handleOpenGroup(group)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
+                  if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
                     e.preventDefault();
                     handleOpenGroup(group);
                   }

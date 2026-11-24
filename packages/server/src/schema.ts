@@ -3875,7 +3875,7 @@ const typeDefs = /* GraphQL */ `
 
 const resolvers = {
   NotificationRecord: {
-    actionable: (parent: { type: string }) => isActionableNotification(parent.type),
+    actionable: (parent: { type: string; payload: Prisma.JsonValue }) => isActionableNotification(parent.type, parent.payload),
     resolvedBy: (parent: { resolvedById?: string | null }, _args: unknown, context: GraphQLContext) =>
       parent.resolvedById ? context.prisma.user.findUnique({ where: { id: parent.resolvedById } }) : null,
   },
