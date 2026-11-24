@@ -32,6 +32,16 @@ type ServerView = { id: string; ownerId: string; name: string; kind: string; vis
 type AnyView = SavedBoardView | SavedBacklogView;
 
 export const SAVED_VIEWS_MIGRATED_KEY = (accountId: string, teamKey: string) => `involute.views.migrated.${accountId}.${teamKey}`;
+const SAVED_VIEWS_RETRY_KEY = (accountId: string, teamKey: string, kind: 'board' | 'backlog') => `involute.views.retry.${accountId}.${teamKey}.${kind}`;
+
+function readRetryViews(key: string): AnyView[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? '[]');
+    return Array.isArray(parsed) ? (parsed as AnyView[]) : [];
+  } catch {
+    return [];
+  }
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function fromServer(view: ServerView): AnyView {
@@ -91,10 +101,12 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string, accou
       }
     }
     // Views saved before the account was known (INV-2157) are in the local copy, so a first
-    // migration uploads them; otherwise they are uploaded here, and a refused one makes the
-    // migration retry it on the next pull, like a refused migrated view (INV-1193).
+    // migration uploads them; otherwise they are uploaded here. A refused one is kept for the
+    // next pull to retry, like a refused migrated view (INV-1193), without retrying the rest.
     for (const kind of ['board', 'backlog'] as const) {
-      const early = takeUnsyncedSavedViews(kind, teamKey, accountId) as AnyView[];
+      const retryKey = SAVED_VIEWS_RETRY_KEY(accountId, teamKey, kind);
+      const early = [...readRetryViews(retryKey), ...(takeUnsyncedSavedViews(kind, teamKey, accountId) as AnyView[])];
+      window.localStorage.removeItem(retryKey);
       if (migrating) continue;
       const have = new Set(server.map((view) => view.id));
       for (const view of early) {
@@ -102,11 +114,9 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string, accou
         const saved = await upsert(kind, view);
         if (!isLive()) return;
         if (saved) server.push(saved);
-        else {
-          refused[kind].push(view);
-          window.localStorage.removeItem(SAVED_VIEWS_MIGRATED_KEY(accountId, teamKey));
-        }
+        else refused[kind].push(view);
       }
+      if (refused[kind].length > 0) window.localStorage.setItem(retryKey, JSON.stringify(refused[kind]));
     }
     known = new Map(server.map((view) => [view.id, fromServer(view)]));
     write('board', [...server.filter((view) => view.kind === 'board').map(fromServer), ...refused.board]);
