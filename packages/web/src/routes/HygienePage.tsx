@@ -159,7 +159,10 @@ export function HygienePage() {
 
             <section aria-label="Incidents without follow-ups">
               <h2>Incidents without follow-ups · {hygiene.incidentsWithoutDownstreamCount}</h2>
-              <p className="observation-hint">An incident closes once it led somewhere: propose its follow-ups DERIVED_FROM it, or state "无可执行点" in its description. Until then it cannot move to Done.</p>
+              <p className="observation-hint">
+                To link a follow-up, open the follow-up issue and choose <strong>Relations → Add relation → Derived from</strong>.
+                Enter the incident’s issue ID and select <strong>Add</strong>. If no follow-up is needed, add “no actionable points” to the incident’s description before moving it to Done.
+              </p>
               <ul className="list-rows">
                 {hygiene.incidentsWithoutDownstream.map((item) => (
                   <IssueRow open="drawer" key={item.id} issue={item} meta={<Badge mono>{item.severity ?? 'no severity'}</Badge>} />

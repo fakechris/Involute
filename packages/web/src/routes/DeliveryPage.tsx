@@ -3,7 +3,10 @@ import { useApolloClient, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
-import { readStoredTeamKey } from '../board/utils';
+import { SHELL_TEAMS_QUERY } from '../board/queries';
+import type { TeamSummary } from '../board/types';
+import { readStoredTeamKey, writeStoredTeamKey } from '../board/utils';
+import { Select } from '../components/controls';
 import { DataTable } from '../components/DataTable';
 import { IssueRow } from '../components/list';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
@@ -192,8 +195,17 @@ function emptyReason(metric: Metric) {
 
 export function DeliveryPage() {
   const client = useApolloClient();
-  const teamKey = readStoredTeamKey() ?? '';
   const [params, setParams] = useSearchParams();
+  const { data: teamData, error: teamError, refetch: refetchTeams } = useQuery<{ teams: { nodes: TeamSummary[] } }>(SHELL_TEAMS_QUERY, {
+    fetchPolicy: 'cache-and-network',
+  });
+  const teams = teamData?.teams.nodes ?? [];
+  const requestedTeamKey = params.get('team');
+  const storedTeamKey = readStoredTeamKey();
+  const team = teams.find(({ key }) => key === requestedTeamKey)
+    ?? teams.find(({ key }) => key === storedTeamKey)
+    ?? (teams.length === 1 ? teams[0] : undefined);
+  const teamKey = team?.key ?? '';
   const [project, setProject] = useProjectParam();
   const [now] = useState(() => new Date());
   const factWindow = parseFactWindow(params.get('from'), params.get('to'), now) ?? windowForPreset('30d', now)!;
@@ -285,6 +297,13 @@ export function DeliveryPage() {
     setParams(updated);
   }
 
+  function changeTeam(key: string) {
+    const updated = new URLSearchParams(params);
+    updated.set('team', key);
+    writeStoredTeamKey(key);
+    setParams(updated);
+  }
+
   const days = (new Date(end).getTime() - new Date(start).getTime()) / 86_400_000;
   const presets = [7, 30, 90].map((day) => ({ value: String(day), label: `${day}d` }));
   const rows = data ? METRICS.map((metric) => ({ ...metric, metric: data[metric.key] })) : [];
@@ -305,30 +324,57 @@ export function DeliveryPage() {
 
   return (
     <div className="observation-page">
-      <PageHeader title="Delivery latency" />
-      <PageToolbar
-        projects={
-          <ProjectFilterCombobox
-            projects={projects}
-            selectedProjectKey={project || null}
-            totalCount={projectData?.projectSummary.totalCount ?? 0}
-            onSelectProject={setProject}
-            extraOptions={noRepositoryOptions}
-            showQuickPills
-          />
-        }
-        view={
-          <SegmentedControl
-            aria-label="Delivery window"
-            options={presets}
-            value={String(days)}
-            onChange={changeWindow}
-          />
-        }
-      />
+      <PageHeader title="Delivery latency" hint={teams.length === 1 ? team?.name : undefined} />
+      {teams.length > 1 || teamKey ? (
+        <PageToolbar
+          projects={
+            <>
+              {teams.length > 1 ? (
+                <Select size="sm" aria-label="Delivery team" value={teamKey} onChange={(event) => changeTeam(event.target.value)}>
+                  <option value="" disabled>Choose a team</option>
+                  {teams.map(({ id, key, name }) => <option key={id} value={key}>{name} ({key})</option>)}
+                </Select>
+              ) : null}
+              {teamKey ? (
+                <ProjectFilterCombobox
+                  projects={projects}
+                  selectedProjectKey={project || null}
+                  totalCount={projectData?.projectSummary.totalCount ?? 0}
+                  onSelectProject={setProject}
+                  extraOptions={noRepositoryOptions}
+                  teamKey={teamKey}
+                  showQuickPills
+                />
+              ) : null}
+            </>
+          }
+          view={
+            teamKey ? (
+              <SegmentedControl
+                aria-label="Delivery window"
+                options={presets}
+                value={String(days)}
+                onChange={changeWindow}
+              />
+            ) : null
+          }
+        />
+      ) : null}
       <PageBody width="wide">
-        {!teamKey ? (
-          <EmptyState title="Select a team" body="Choose a team in the sidebar to view delivery latency." />
+        {!teamData && teamError ? (
+          <div role="alert">
+            <EmptyState
+              title="Could not load teams"
+              body={teamError.message}
+              action={<Btn variant="subtle" onClick={() => void refetchTeams()}>Retry</Btn>}
+            />
+          </div>
+        ) : !teamData ? (
+          <LoadingState>Loading teams…</LoadingState>
+        ) : teams.length === 0 ? (
+          <EmptyState title="No teams available" body="You need access to a team to view its delivery latency." />
+        ) : !teamKey ? (
+          <EmptyState title="Select a team" body="Choose a team above to see its delivery latency." />
         ) : !current ? (
           <LoadingState>Loading delivery latency…</LoadingState>
         ) : current.error ? (

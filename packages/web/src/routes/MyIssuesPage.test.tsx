@@ -100,6 +100,30 @@ describe('MyIssuesPage (INV-1314)', () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole('heading', { name: 'No issues assigned to you' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear all filters' })).not.toBeInTheDocument();
+  });
+
+  it('shows a no-match state and clears text, project, priority and workflow filters together (INV-2121)', () => {
+    vi.mocked(useQuery).mockReturnValue({
+      data: { issues: { nodes: [issue('INV-1', 'Fix login', 'acme/web', 1, 'STARTED')] } },
+      loading: false,
+    } as never);
+    render(<MemoryRouter initialEntries={['/my-issues?project=acme/web&priority=1']}><MyIssuesPage /></MemoryRouter>);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by state' }), { target: { value: 'STARTED' } });
+    expect(screen.getByRole('link', { name: 'Open issue INV-1' })).toBeInTheDocument();
+    const search = screen.getByRole('searchbox', { name: 'Filter by text' });
+    fireEvent.change(search, { target: { value: 'no-such-issue' } });
+    fireEvent.keyDown(search, { key: 'Enter' });
+
+    expect(screen.getByRole('heading', { name: 'No issues match your filters' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No issues assigned to you' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
+
+    expect(screen.getByRole('link', { name: 'Open issue INV-1' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Filter by text' })).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: 'Filter by state' })).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: 'Filter by priority' })).toHaveValue('');
+    expect(screen.queryByRole('button', { name: 'Project: acme/web' })).not.toBeInTheDocument();
   });
 
   it('opens a row in the drawer and Esc closes it, keeping the filters (INV-1387)', async () => {

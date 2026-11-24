@@ -1,5 +1,6 @@
 import { useQuery } from '@apollo/client/react';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { BOARD_PAGE_QUERY } from '../board/queries';
 import type { BoardPageQueryData, BoardPageQueryVariables, IssueSummary, WorkflowStateType } from '../board/types';
@@ -7,10 +8,10 @@ import { readStoredTeamKey } from '../board/utils';
 import { Select } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { IssueRow } from '../components/list';
-import { Avatar } from '../components/Primitives';
+import { Avatar, Btn } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { EmptyState, LoadingState, QueryErrorState } from '../components/status';
-import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
+import { useWorkFilters, WorkFilterBar, WORK_FILTER_KEYS } from '../components/WorkFilterBar';
 import { STATE_TYPE_LABEL } from '../components/graph/graph-colors';
 import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
@@ -40,6 +41,7 @@ interface IssueGroup {
 export function MyIssuesPage() {
   const teamKey = readStoredTeamKey();
   const [filterStateType, setFilterStateType] = useState<WorkflowStateType | ''>('');
+  const [, setParams] = useSearchParams();
   const [project, setProject] = useProjectParam();
   const workFilters = useWorkFilters();
 
@@ -85,6 +87,16 @@ export function MyIssuesPage() {
     [myIssues],
   );
 
+  function clearAllFilters() {
+    setFilterStateType('');
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete('project');
+      for (const key of WORK_FILTER_KEYS) next.delete(key);
+      return next;
+    });
+  }
+
   const firstAssignee = myIssues[0]?.assignee ?? null;
   const viewerUser = firstAssignee ? { name: firstAssignee.name ?? undefined, email: firstAssignee.email ?? undefined } : null;
 
@@ -126,8 +138,14 @@ export function MyIssuesPage() {
           <LoadingState>Loading issues…</LoadingState>
         ) : error ? (
           <QueryErrorState title="Could not load your issues" onRetry={refetch} />
-        ) : myIssues.length === 0 ? (
+        ) : allIssues.length === 0 ? (
           <EmptyState title="No issues assigned to you" body="Issues assigned to your account will appear here." />
+        ) : myIssues.length === 0 ? (
+          <EmptyState
+            title="No issues match your filters"
+            body="Clear your filters to see all your assigned issues in this view."
+            action={<Btn variant="subtle" onClick={clearAllFilters}>Clear all filters</Btn>}
+          />
         ) : (
           groups.map((g) =>
             g.items.length === 0 ? null : (

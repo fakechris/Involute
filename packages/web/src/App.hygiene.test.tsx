@@ -74,6 +74,14 @@ describe('work graph health page (INV-721)', () => {
     expect(within(screen.getByRole('region', { name: 'In Review with nothing to open' })).getByText('INV-1553')).toBeInTheDocument();
   });
 
+  it('explains both ways to resolve a missing incident follow-up in English (INV-2122)', async () => {
+    renderApp(App, { data: boardQueryResult, loading: false, hygieneData }, ['/hygiene']);
+    const incidents = await screen.findByRole('region', { name: 'Incidents without follow-ups' });
+    expect(incidents).toHaveTextContent('open the follow-up issue and choose Relations → Add relation → Derived from');
+    expect(incidents).toHaveTextContent('Enter the incident’s issue ID and select Add');
+    expect(incidents).toHaveTextContent('add “no actionable points” to the incident’s description before moving it to Done');
+  });
+
   it('records a worded dependency in the right direction', async () => {
     const link = vi.fn().mockResolvedValue({ data: { workLink: { success: true, link: null } } });
     const fallback = apolloMocks.useMutation.getMockImplementation() as ((...args: unknown[]) => unknown) | undefined;
