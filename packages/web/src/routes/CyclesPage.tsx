@@ -406,7 +406,7 @@ export function CyclesPage() {
           ) : (
             <>
               {milestoneListError ? <InlineError>{milestoneListError}</InlineError> : null}
-              {milestones.some((milestone) => milestone.viewerCanWrite === false) ? <p className="page-note" role="note">{READ_ONLY_TEAM_MESSAGE}</p> : null}
+              {milestones.some((milestone) => milestone.viewerCanWrite === false) ? <p className="page-note page-note--wrap" role="note">{READ_ONLY_TEAM_MESSAGE}</p> : null}
               {activeMilestones.length > 0 && (
                 <section className="cycles-section">
                   <h2 className="cycles-section__title">In progress</h2>

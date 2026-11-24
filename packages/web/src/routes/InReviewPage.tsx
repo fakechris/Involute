@@ -463,7 +463,7 @@ export function InReviewPage() {
                   {itemErrors[item.id] ? <InlineError>{itemErrors[item.id]}</InlineError> : null}
                   <div className="observation-card__actions">
                     {item.deliveryRootId ? <Btn variant="accent" onClick={() => navigate(`/work/${item.deliveryRootId}`)}>Review delivery package</Btn> : item.viewerCanWrite === false ? (
-                      <p className="page-note" role="note">{READ_ONLY_TEAM_MESSAGE}</p>
+                      <p className="page-note page-note--wrap" role="note">{READ_ONLY_TEAM_MESSAGE}</p>
                     ) : <>
                     <Btn
                       variant="accent"

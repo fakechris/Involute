@@ -765,7 +765,7 @@ export function CandidateCard({
           />
         </label>
       </fieldset>
-      {readOnly ? <p className="page-note" role="note">{READ_ONLY_TEAM_MESSAGE}</p> : null}
+      {readOnly ? <p className="page-note page-note--wrap" role="note">{READ_ONLY_TEAM_MESSAGE}</p> : null}
       {error ? <InlineError>{error}</InlineError> : null}
       <div className="observation-card__actions">
         {(() => {

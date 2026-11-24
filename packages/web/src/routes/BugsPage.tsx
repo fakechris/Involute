@@ -339,7 +339,7 @@ export function BugsPage() {
               ) : (
                 <>
                 {visibleBugs.some((issue) => issue.viewerCanWrite === false) ? (
-                  <p className="page-note" role="note">{READ_ONLY_TEAM_MESSAGE}</p>
+                  <p className="page-note page-note--wrap" role="note">{READ_ONLY_TEAM_MESSAGE}</p>
                 ) : null}
                 <ul className="list-rows" aria-label="Open bugs list">
                   {visibleBugs.map((issue) => (
