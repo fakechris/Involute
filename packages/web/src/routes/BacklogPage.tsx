@@ -14,6 +14,8 @@ import {
   type SavedBacklogView,
   writeSavedBacklogViews,
   writeStoredBacklogViewState,
+  BACKLOG_SAVED_VIEWS_EVENT,
+  type SavedBacklogViewsEventDetail,
 } from '../backlog/views';
 import { FilterChip, FilterMenu, FilterSearch, SavedViewControl, SortControl } from '../components/filters';
 import { PageBody, PageToolbar } from '../components/layout';
@@ -84,8 +86,16 @@ export function BacklogPage({
     function reloadSavedViews() {
       setSavedViews(readSavedBacklogViews(teamKey));
     }
+    // The server sync replaces the list (views saved on another device): a later save keeps them (INV-2157).
+    function syncSavedViews(event: Event) {
+      if ((event as CustomEvent<SavedBacklogViewsEventDetail>).detail?.teamKey === teamKey) reloadSavedViews();
+    }
     window.addEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
-    return () => window.removeEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
+    window.addEventListener(BACKLOG_SAVED_VIEWS_EVENT, syncSavedViews);
+    return () => {
+      window.removeEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
+      window.removeEventListener(BACKLOG_SAVED_VIEWS_EVENT, syncSavedViews);
+    };
   }, [teamKey]);
 
   useEffect(() => {

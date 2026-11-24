@@ -60,6 +60,33 @@ describe('saved views sync', () => {
     expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual([uuid(100)]);
   });
 
+  // INV-2157: in token sign-in the account is known only after a GraphQL round trip; a view saved before that is kept.
+  it('keeps a view saved before the account was known and uploads it once the account is known', async () => {
+    setSavedViewsAccount(null);
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'Early', state: BOARD_STATE }]);
+    expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['Early']);
+
+    setSavedViewsAccount('user-a');
+    expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['Early']);
+    const server: ServerView[] = [serverView(uuid(1), 'Other device')];
+    const { client, mutate } = fakeClient(server);
+    stop = startSavedViewsSync(client, 'INV', 'user-a');
+
+    await vi.waitFor(() => expect(readSavedBoardViews('INV').map((view) => view.name).sort()).toEqual(['Early', 'Other device']));
+    expect(upsertCalls(mutate)).toHaveLength(1);
+    expect(deleteCalls(mutate)).toHaveLength(0);
+    expect(server.map((view) => view.name).sort()).toEqual(['Early', 'Other device']);
+  });
+
+  it('gives a view saved before sign-in to nobody else once an account signs out', () => {
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'Early', state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    setSavedViewsAccount(null);
+    expect(readSavedBoardViews('INV')).toEqual([]);
+  });
+
   it('still deletes a server view that was removed locally', async () => {
     window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
     const server: ServerView[] = [serverView(uuid(1), 'Keep'), serverView(uuid(2), 'Drop')];

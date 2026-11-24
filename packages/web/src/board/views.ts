@@ -1,6 +1,6 @@
 import type { BoardGroupBy, BoardIssueGroup, FieldDefinitionSummary, IssueSummary, LabelSummary, UserSummary } from './types';
 import { readLocalStorageValue } from '../lib/storage';
-import { savedViewsStorageKey } from '../lib/saved-views-account';
+import { readPendingSavedViews, savedViewsStorageKey, writePendingSavedViews } from '../lib/saved-views-account';
 
 export type BoardSortField = 'identifier' | 'title' | 'updatedAt' | 'createdAt' | 'priority';
 export type BoardSortDirection = 'asc' | 'desc';
@@ -184,7 +184,8 @@ export function readSavedBoardViews(teamKey: string | null): SavedBoardView[] {
   }
 
   const storageKey = getSavedBoardViewsStorageKey(teamKey);
-  const rawValue = storageKey ? readLocalStorageValue(storageKey) : null;
+  if (!storageKey) return normalizeSavedBoardViews(readPendingSavedViews('board', teamKey));
+  const rawValue = readLocalStorageValue(storageKey);
 
   if (!rawValue) {
     return [];
@@ -205,6 +206,7 @@ export function writeSavedBoardViews(teamKey: string | null, views: SavedBoardVi
   try {
     const storageKey = getSavedBoardViewsStorageKey(teamKey);
     if (storageKey) window.localStorage.setItem(storageKey, JSON.stringify(views));
+    else writePendingSavedViews('board', teamKey, views);
   } catch {
     // Ignore storage failures in restricted browser contexts.
   }

@@ -14,7 +14,7 @@ import {
   type SavedBoardView,
   type SavedBoardViewsEventDetail,
 } from '../board/views';
-import { getSavedViewsAccount } from './saved-views-account';
+import { getSavedViewsAccount, takeUnsyncedSavedViews } from './saved-views-account';
 import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION, SAVED_VIEWS_QUERY } from '../work/queries';
 
 /**
@@ -87,6 +87,17 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string, accou
       }
       if (refused.board.length === 0 && refused.backlog.length === 0) {
         window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY(accountId, teamKey), new Date().toISOString());
+      }
+    }
+    // Views saved before the account was known (INV-2157) are uploaded once, like the migration.
+    for (const kind of ['board', 'backlog'] as const) {
+      const have = new Set(server.map((view) => view.id));
+      for (const view of takeUnsyncedSavedViews(kind, teamKey, accountId) as AnyView[]) {
+        if (have.has(view.id)) continue;
+        const saved = await upsert(kind, view);
+        if (!isLive()) return;
+        if (saved) server.push(saved);
+        else refused[kind].push(view);
       }
     }
     known = new Map(server.map((view) => [view.id, fromServer(view)]));
