@@ -1141,6 +1141,7 @@ export const BUGS_PAGE_QUERY = gql`
         identifier
         title
         revision
+        viewerCanWrite
         assignee {
           id
           name
@@ -1463,6 +1464,7 @@ export const MILESTONE_ISSUES_QUERY = gql`
         priority
         severity
         kind
+        viewerCanWrite
         createdAt
         updatedAt
         state {

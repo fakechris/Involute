@@ -54,6 +54,8 @@ export interface CandidateWork {
   parent?: { id: string; identifier: string; title: string; kind: WorkKind } | null;
   /** Identifiers its text names like dependencies without a BLOCKS link (INV-720). */
   dependencyHints?: string[];
+  /** False when the viewer may only read this work (a team Viewer): no Commit, Decline, Accept or Return. */
+  viewerCanWrite?: boolean;
   team: {
     id: string;
     key: string;

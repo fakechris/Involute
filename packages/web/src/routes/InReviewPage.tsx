@@ -12,6 +12,7 @@ import { ProjectFilterCombobox, type AvailableProject } from '../components/Proj
 import { Badge, BulkActionBar, EmptyState, InlineError, LoadingState } from '../components/status';
 import { filtersToIql, joinIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { useListKeys } from '../components/useListKeys';
+import { changeErrorMessage, isForbiddenError, READ_ONLY_TEAM_MESSAGE } from '../lib/apollo';
 import { IN_REVIEW_PAGE_QUERY, IN_REVIEW_PROJECTS_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
 import type {
   InReviewPageQueryData,
@@ -27,6 +28,13 @@ const NO_REPOSITORY = '__none__';
 const IN_REVIEW_VIEW_STORAGE_KEY = 'involute.inReview.iqlQuery';
 const BULK_ACCEPT_ERROR = 'Some selected items could not be accepted. Refresh and retry failed rows.';
 const BULK_REJECT_ERROR = 'Some selected items could not be returned. Refresh and retry failed rows.';
+const ITEM_ACCEPT_ERROR = 'This work could not be accepted. Refresh and try again.';
+const ITEM_REJECT_ERROR = 'This work could not be returned. Refresh and try again.';
+
+/** A team Viewer reads the queue but cannot decide it (docs/permissions.md, INV-2158). */
+function canReview(item: InReviewWork): boolean {
+  return !item.deliveryRootId && item.viewerCanWrite !== false;
+}
 
 function readStoredIql(): string {
   try {
@@ -142,7 +150,7 @@ export function InReviewPage() {
   const pageInfo = data?.issues?.pageInfo;
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedItems = useMemo(
-    () => items.filter((item) => !item.deliveryRootId && selectedIdSet.has(item.id)),
+    () => items.filter((item) => canReview(item) && selectedIdSet.has(item.id)),
     [items, selectedIdSet],
   );
 
@@ -164,14 +172,14 @@ export function InReviewPage() {
   }
 
   function toggleSelection(item: InReviewWork) {
-    if (item.deliveryRootId) return;
+    if (!canReview(item)) return;
     setSelectedIds((current) =>
       current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id],
     );
   }
 
   function selectAllVisible() {
-    setSelectedIds(items.filter((item) => !item.deliveryRootId).map((item) => item.id));
+    setSelectedIds(items.filter(canReview).map((item) => item.id));
   }
 
   function clearSelection() {
@@ -229,14 +237,14 @@ export function InReviewPage() {
       if (!result.data?.workReview.success || !result.data.workReview.issue) {
         setItemErrors((current) => ({
           ...current,
-          [item.id]: result.data?.workReview.message ?? (decision === 'ACCEPTED' ? BULK_ACCEPT_ERROR : BULK_REJECT_ERROR),
+          [item.id]: result.data?.workReview.message ?? (decision === 'ACCEPTED' ? ITEM_ACCEPT_ERROR : ITEM_REJECT_ERROR),
         }));
         return;
       }
       setSelectedIds((current) => current.filter((id) => id !== item.id));
       await refetch();
-    } catch {
-      setItemErrors((current) => ({ ...current, [item.id]: decision === 'ACCEPTED' ? BULK_ACCEPT_ERROR : BULK_REJECT_ERROR }));
+    } catch (error) {
+      setItemErrors((current) => ({ ...current, [item.id]: changeErrorMessage(error, decision === 'ACCEPTED' ? ITEM_ACCEPT_ERROR : ITEM_REJECT_ERROR) }));
     } finally {
       setItemPending(({ [item.id]: _done, ...rest }) => rest);
     }
@@ -265,6 +273,7 @@ export function InReviewPage() {
     );
 
     let hadFailure = false;
+    let forbidden = false;
     const succeededIds: string[] = [];
 
     results.forEach((result, index) => {
@@ -278,6 +287,7 @@ export function InReviewPage() {
         return;
       }
       hadFailure = true;
+      if (result.status === 'rejected' && isForbiddenError(result.reason)) forbidden = true;
     });
 
     setSelectedIds((current) => current.filter((id) => !succeededIds.includes(id)));
@@ -288,7 +298,7 @@ export function InReviewPage() {
     }
 
     if (hadFailure) {
-      setBulkError(decision === 'ACCEPTED' ? BULK_ACCEPT_ERROR : BULK_REJECT_ERROR);
+      setBulkError(forbidden ? READ_ONLY_TEAM_MESSAGE : decision === 'ACCEPTED' ? BULK_ACCEPT_ERROR : BULK_REJECT_ERROR);
     } else {
       setBulkReason('');
     }
@@ -370,7 +380,7 @@ export function InReviewPage() {
         ) : (
           <div className="in-review-queue">
           <div className="in-review-list-toolbar">
-            <Btn variant="ghost" size="sm" onClick={selectAllVisible} disabled={!items.some((item) => !item.deliveryRootId)}>
+            <Btn variant="ghost" size="sm" onClick={selectAllVisible} disabled={!items.some(canReview)}>
               Select all visible
             </Btn>
           </div>
@@ -387,7 +397,7 @@ export function InReviewPage() {
                   role="listitem"
                 >
                   <header className="observation-card__header">
-                    {!item.deliveryRootId ? <label className="in-review-select">
+                    {canReview(item) ? <label className="in-review-select">
                       <input
                         type="checkbox"
                         checked={checked}
@@ -452,7 +462,9 @@ export function InReviewPage() {
                   </dl>
                   {itemErrors[item.id] ? <InlineError>{itemErrors[item.id]}</InlineError> : null}
                   <div className="observation-card__actions">
-                    {item.deliveryRootId ? <Btn variant="accent" onClick={() => navigate(`/work/${item.deliveryRootId}`)}>Review delivery package</Btn> : <>
+                    {item.deliveryRootId ? <Btn variant="accent" onClick={() => navigate(`/work/${item.deliveryRootId}`)}>Review delivery package</Btn> : item.viewerCanWrite === false ? (
+                      <p className="page-note page-note--wrap" role="note">{READ_ONLY_TEAM_MESSAGE}</p>
+                    ) : <>
                     <Btn
                       variant="accent"
                       icon={<IcoCheck size={12} />}

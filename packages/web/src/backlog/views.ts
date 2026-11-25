@@ -1,6 +1,6 @@
 import type { IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import { readLocalStorageValue } from '../lib/storage';
-import { savedViewsStorageKey } from '../lib/saved-views-account';
+import { readPendingSavedViews, savedViewsStorageKey, writePendingSavedViews } from '../lib/saved-views-account';
 
 export type BacklogSortField =
   | 'identifier'
@@ -175,7 +175,8 @@ export function readSavedBacklogViews(teamKey: string | null): SavedBacklogView[
   }
 
   const storageKey = getSavedBacklogViewsStorageKey(teamKey);
-  const rawValue = storageKey ? readLocalStorageValue(storageKey) : null;
+  if (!storageKey) return normalizeSavedBacklogViews(readPendingSavedViews('backlog', teamKey));
+  const rawValue = readLocalStorageValue(storageKey);
 
   if (!rawValue) {
     return [];
@@ -196,6 +197,7 @@ export function writeSavedBacklogViews(teamKey: string | null, views: SavedBackl
   try {
     const storageKey = getSavedBacklogViewsStorageKey(teamKey);
     if (storageKey) window.localStorage.setItem(storageKey, JSON.stringify(views));
+    else writePendingSavedViews('backlog', teamKey, views);
   } catch {
     // Ignore storage failures in restricted browser contexts.
   }

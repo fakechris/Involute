@@ -24,7 +24,8 @@ describe('WorkLinks', () => {
 
     query.error = new Error('Not authenticated');
     view.rerender(<WorkLinks workId="work-1" />);
-    expect(screen.getByRole('alert')).toHaveTextContent(/^Your session ended\.$/);
+    // Named, so several failed sections of one drawer are told apart (INV-2141).
+    expect(screen.getByRole('alert')).toHaveTextContent(/^Commits and links did not load\. Sign in again to see it\.$/);
     expect(screen.queryByText(/Not authenticated/i)).not.toBeInTheDocument();
   });
 

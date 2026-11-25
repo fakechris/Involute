@@ -27,6 +27,7 @@ import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { ProjectBadge } from '../components/ProjectBadge';
 import { ReportBugDialog } from '../components/ReportBugDialog';
 import { Badge, EmptyState, InlineError, LoadingState, StatRow, StatTile } from '../components/status';
+import { changeErrorMessage, READ_ONLY_TEAM_MESSAGE } from '../lib/apollo';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { placementProjects } from '../work/placement';
 import { GRAPH_PROJECTS_QUERY } from '../work/queries';
@@ -336,18 +337,24 @@ export function BugsPage() {
               ) : visibleBugs.length === 0 ? (
                 <p className="bugs-panel__empty">No open bug matches these filters.</p>
               ) : (
+                <>
+                {visibleBugs.some((issue) => issue.viewerCanWrite === false) ? (
+                  <p className="page-note page-note--wrap" role="note">{READ_ONLY_TEAM_MESSAGE}</p>
+                ) : null}
                 <ul className="list-rows" aria-label="Open bugs list">
                   {visibleBugs.map((issue) => (
                     <BugRow
                       key={issue.id}
                       issue={issue}
                       states={statesByTeam.get(issue.team.id) ?? []}
+                      canWrite={issue.viewerCanWrite !== false}
                       viewerId={viewerId}
                       focused={listKeys.focusedId === issue.id}
                       onRefresh={() => void refetch()}
                     />
                   ))}
                 </ul>
+                </>
               )}
             </section>
           </div>
@@ -555,12 +562,15 @@ const PRIORITIES: Array<[number, string]> = [
 export function BugRow({
   issue,
   states,
+  canWrite = true,
   viewerId,
   focused,
   onRefresh,
 }: {
   issue: IssueSummary;
   states: WorkflowStateSummary[];
+  /** False when the viewer may only read the bug's team: the controls are disabled. */
+  canWrite?: boolean;
   viewerId: string | null;
   focused: boolean;
   onRefresh: () => void;
@@ -578,8 +588,8 @@ export function BugRow({
         return;
       }
       onRefresh();
-    } catch {
-      setError('The change was not saved. Refresh and try again.');
+    } catch (caught) {
+      setError(changeErrorMessage(caught, 'The change was not saved. Refresh and try again.'));
     }
   }
 
@@ -601,7 +611,7 @@ export function BugRow({
             size="sm"
             aria-label={`Status of ${issue.identifier}`}
             value={issue.state.id}
-            disabled={saving || states.length === 0}
+            disabled={!canWrite || saving || states.length === 0}
             onChange={(event) => void update({ stateId: event.target.value })}
           >
             {(states.length ? states : [issue.state]).map((state) => (
@@ -612,7 +622,7 @@ export function BugRow({
             size="sm"
             aria-label={`Priority of ${issue.identifier}`}
             value={issue.priority}
-            disabled={saving}
+            disabled={!canWrite || saving}
             onChange={(event) => void update({ priority: Number(event.target.value) })}
           >
             {issue.priority === 0 ? <option value={0}>No priority</option> : null}
@@ -622,11 +632,11 @@ export function BugRow({
           </Select>
           {mine ? (
             <Badge tone="accent">Yours</Badge>
-          ) : (
+          ) : canWrite ? (
             <Btn variant="ghost" disabled={saving || !viewerId} onClick={() => void update({ assigneeId: viewerId })}>
               Assign to me
             </Btn>
-          )}
+          ) : null}
         </>
       }
     />

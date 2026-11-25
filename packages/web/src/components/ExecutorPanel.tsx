@@ -19,7 +19,7 @@ export function ExecutorPanel({ workId, canDispatch = false }: { workId: string;
   const [resolutions, setResolutions] = useState<Record<string, { outcome: string; reason: string; evidenceUrl: string; observedSha: string }>>({});
   let context: Context | null = null;
   try { if (data) context = JSON.parse(data.executorContextJson) as Context; } catch { /* explicit error below */ }
-  if (error || data && (!context || context.protocolVersion !== 1 || !Array.isArray(context.dispatches))) return <p role="alert">{loadErrorMessage(error, 'Executor status is unavailable or uses an unsupported protocol.')}</p>;
+  if (error || data && (!context || context.protocolVersion !== 1 || !Array.isArray(context.dispatches))) return <p role="alert">{loadErrorMessage(error, 'Executor status is unavailable or uses an unsupported protocol.', 'Executor status')}</p>;
   if (!context || !context.dispatches.length && !canDispatch) return null;
   async function act(operation: string, dispatch?: Dispatch, extra: Record<string, unknown> = {}) {
     try {

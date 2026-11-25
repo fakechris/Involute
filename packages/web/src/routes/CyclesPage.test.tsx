@@ -2,6 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useQuery } from '@apollo/client/react';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
+
+import { READ_ONLY_TEAM_MESSAGE } from '../lib/apollo';
 import { CyclesPage } from './CyclesPage';
 
 const mockRunIssueCreate = vi.fn();
@@ -225,5 +229,62 @@ describe('CyclesPage', () => {
     fireEvent.click(cyclesTab);
 
     expect(screen.getByText('Sprint 1')).toBeInTheDocument();
+  });
+});
+
+describe('CyclesPage access and load failures', () => {
+  function withQuery(override: (docStr: string, result: ReturnType<typeof useQuery>) => ReturnType<typeof useQuery>) {
+    const query = vi.mocked(useQuery);
+    const original = query.getMockImplementation()!;
+    query.mockImplementation(((document: unknown, options: unknown) => override(JSON.stringify(document), original(document as never, options as never))) as never);
+    return () => query.mockImplementation(original);
+  }
+
+  it('hides Edit, Delete and Configure on milestones the viewer may only read, and says why (INV-2160)', () => {
+    const restore = withQuery((docStr, result) => {
+      if (docStr.includes('BoardPage')) {
+        const data = result.data as { teams: { nodes: Array<Record<string, unknown>> } };
+        return { ...result, data: { teams: { nodes: data.teams.nodes.map((team) => ({ ...team, viewerCanWrite: false })) } } } as typeof result;
+      }
+      if (!docStr.includes('MilestoneIssues')) return result;
+      const data = result.data as { issues: { nodes: Array<Record<string, unknown>> } };
+      return { ...result, data: { issues: { nodes: data.issues.nodes.map((milestone) => ({ ...milestone, viewerCanWrite: false })) } } } as typeof result;
+    });
+    try {
+      render(<MemoryRouter><CyclesPage /></MemoryRouter>);
+      expect(screen.getByText('Beta Release')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Configure' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'New milestone' })).toBeNull();
+      expect(screen.getByRole('note')).toHaveTextContent(READ_ONLY_TEAM_MESSAGE);
+    } finally {
+      restore();
+    }
+  });
+
+  it('shows in the dialog why a Save was refused instead of doing nothing (INV-2160)', async () => {
+    mockRunIssueUpdate.mockRejectedValueOnce(new CombinedGraphQLErrors({ errors: [{ message: 'You do not have edit access to this team.', extensions: { code: 'FORBIDDEN' } }] }));
+    render(<MemoryRouter><CyclesPage /></MemoryRouter>);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Configure' })[0]!);
+    const form = screen.getByRole('dialog', { name: 'Edit milestone' });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save', hidden: true }));
+    expect(await within(form).findByRole('alert', { hidden: true })).toHaveTextContent(READ_ONLY_TEAM_MESSAGE);
+  });
+
+  it('shows a load failure with Retry, not "No milestones configured", when the milestones cannot be read (INV-2162)', async () => {
+    const refetch = vi.fn().mockResolvedValue(undefined);
+    const restore = withQuery((docStr, result) => (docStr.includes('MilestoneIssues')
+      ? ({ ...result, data: undefined, loading: false, error: new Error('Failed to fetch'), refetch } as typeof result)
+      : result));
+    try {
+      render(<MemoryRouter><CyclesPage /></MemoryRouter>);
+      expect(screen.getByText('Could not load milestones')).toBeInTheDocument();
+      expect(screen.queryByText('No milestones configured')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await waitFor(() => expect(refetch).toHaveBeenCalled());
+    } finally {
+      restore();
+    }
   });
 });

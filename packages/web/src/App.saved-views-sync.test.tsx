@@ -8,8 +8,8 @@ import { boardQueryResult, mockSessionState, renderApp } from './test/app-test-h
 import { App } from './App';
 import { ACTIVE_TEAM_STORAGE_KEY } from './board/utils';
 import { type BoardViewState } from './board/views';
-import { setSavedViewsAccount } from './lib/saved-views-account';
-import { SAVED_VIEW_UPSERT_MUTATION, SAVED_VIEWS_QUERY } from './work/queries';
+import { getSavedViewsAccount, setSavedViewsAccount } from './lib/saved-views-account';
+import { SAVED_VIEW_UPSERT_MUTATION, SAVED_VIEWS_ACCOUNT_QUERY, SAVED_VIEWS_QUERY } from './work/queries';
 
 // INV-1196: the running app starts the saved-views server sync (INV-1005) once it knows who is signed in.
 type ServerView = { id: string; ownerId: string; name: string; kind: string; visibility: 'PRIVATE' | 'TEAM'; stateJson: string };
@@ -89,6 +89,21 @@ describe('saved views server sync in the running app (INV-1196)', () => {
     await waitFor(() => expect(server.views.map((view) => view.name)).toEqual(['Saved on the board']));
   });
 
+  it('keeps a view saved on another device when this board saves a new one (INV-2157)', async () => {
+    const server = fakeServer();
+    server.views.push({ id: '00000000-0000-4000-8000-000000000999', ownerId: 'user-a', name: 'Other device', kind: 'board', visibility: 'PRIVATE', stateJson: JSON.stringify(BOARD_STATE) });
+    vi.spyOn(window, 'prompt').mockReturnValue('Saved here');
+    window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, 'INV');
+    signIn('user-a', 'Alice');
+    renderApp(server.Device, { data: boardQueryResult, loading: false }, ['/']);
+    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    expect(await screen.findByRole('option', { name: 'Other device' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+    await waitFor(() => expect(server.views.map((view) => view.name).sort()).toEqual(['Other device', 'Saved here']));
+    expect(server.mutate.mock.calls.filter(([options]) => (options as { mutation: unknown }).mutation !== SAVED_VIEW_UPSERT_MUTATION)).toHaveLength(0);
+  });
+
   it('restores the same Board state filter from the saved view card and the Board dropdown', async () => {
     const server = fakeServer();
     const viewName = 'Ready queue';
@@ -159,5 +174,52 @@ describe('saved views server sync in the running app (INV-1196)', () => {
     await waitFor(() => expect(savedViewsQueries(server.query)).toHaveLength(1));
     expect(await screen.findByLabelText('View Offline queue')).toBeInTheDocument();
     expect(JSON.parse(window.localStorage.getItem('involute.board.savedViews.user-a.INV') ?? '[]')).toHaveLength(1);
+  });
+});
+
+// INV-2157: token sign-in (bearer token + viewer assertion, as the e2e stack runs) has no cookie
+// session, so /auth/session names nobody; the views are kept for the viewer GraphQL names.
+describe('saved views in token sign-in mode', () => {
+  beforeEach(() => setSavedViewsAccount(null));
+
+  it('stores a view saved on the board for the GraphQL viewer and syncs it', async () => {
+    const server = fakeServer();
+    const answer = server.query.getMockImplementation()!;
+    server.query.mockImplementation((async (options: { query: unknown }) =>
+      options.query === SAVED_VIEWS_ACCOUNT_QUERY ? { data: { viewer: { id: 'user-token' } } } : answer()) as never);
+    vi.spyOn(window, 'prompt').mockReturnValue('Token queue');
+    window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, 'INV');
+    mockSessionState({ authMode: 'token', authenticated: false, googleOAuthConfigured: false });
+    renderApp(server.Device, { data: boardQueryResult, loading: false }, ['/']);
+    await waitFor(() => expect(getSavedViewsAccount()).toBe('user-token'));
+    await waitFor(() => expect(savedViewsQueries(server.query)).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+    await waitFor(() => expect(server.views.map((view) => view.name)).toEqual(['Token queue']));
+    expect(window.localStorage.getItem('involute.board.savedViews.user-token.INV')).toContain('Token queue');
+  });
+
+  it('keeps a view saved before the GraphQL viewer is known (INV-2157)', async () => {
+    const server = fakeServer();
+    const answer = server.query.getMockImplementation()!;
+    let knowViewer: () => void = () => undefined;
+    const viewerKnown = new Promise<void>((resolve) => { knowViewer = resolve; });
+    server.query.mockImplementation((async (options: { query: unknown }) => {
+      if (options.query !== SAVED_VIEWS_ACCOUNT_QUERY) return answer();
+      await viewerKnown;
+      return { data: { viewer: { id: 'user-early' } } };
+    }) as never);
+    vi.spyOn(window, 'prompt').mockReturnValue('Early token queue');
+    window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, 'INV');
+    mockSessionState({ authMode: 'token', authenticated: false, googleOAuthConfigured: false });
+    renderApp(server.Device, { data: boardQueryResult, loading: false }, ['/']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Filter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+    expect(getSavedViewsAccount()).toBeNull();
+
+    knowViewer();
+    await waitFor(() => expect(server.views.map((view) => view.name)).toEqual(['Early token queue']));
+    expect(screen.getByRole('option', { name: 'Early token queue' })).toBeInTheDocument();
+    expect(window.localStorage.getItem('involute.board.savedViews.user-early.INV')).toContain('Early token queue');
   });
 });
