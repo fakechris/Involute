@@ -20,7 +20,7 @@ Exit criteria:
 
 ## M1: Deployable self-hosting
 
-Status: deployment path implemented and previously exercised; the current mainline/kernel build is not deployed.
+Status: operational. Production runs `main` by immutable `sha-<12>` image on one VPS with pre-deploy and daily verified backups ([ops.md](./ops.md)); an off-box backup copy is still open.
 
 Scope:
 
