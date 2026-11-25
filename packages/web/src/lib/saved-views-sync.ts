@@ -14,7 +14,7 @@ import {
   type SavedBoardView,
   type SavedBoardViewsEventDetail,
 } from '../board/views';
-import { getSavedViewsAccount, takeUnsyncedSavedViews } from './saved-views-account';
+import { getSavedViewsAccount, SAVED_VIEWS_RETRY_KEY, takeUnsyncedSavedViews } from './saved-views-account';
 import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION, SAVED_VIEWS_QUERY } from '../work/queries';
 
 /**
@@ -32,7 +32,6 @@ type ServerView = { id: string; ownerId: string; name: string; kind: string; vis
 type AnyView = SavedBoardView | SavedBacklogView;
 
 export const SAVED_VIEWS_MIGRATED_KEY = (accountId: string, teamKey: string) => `involute.views.migrated.${accountId}.${teamKey}`;
-const SAVED_VIEWS_RETRY_KEY = (accountId: string, teamKey: string, kind: 'board' | 'backlog') => `involute.views.retry.${accountId}.${teamKey}.${kind}`;
 
 function readRetryViews(key: string): AnyView[] {
   try {

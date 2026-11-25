@@ -23,6 +23,7 @@ import { ProjectBadge } from '../components/ProjectBadge';
 import { BulkActionBar, EmptyState, LoadingState } from '../components/status';
 import { WorkFilterBar, useWorkFilters } from '../components/WorkFilterBar';
 import { Btn } from '../components/Primitives';
+import { newViewId } from '../lib/view-id';
 import { Checkbox, Select } from '../components/controls';
 
 interface BacklogPageProps {
@@ -454,9 +455,5 @@ function formatBacklogTimestamp(value: string): string {
 }
 
 function createSavedViewId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-
-  return `backlog-view-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return newViewId();
 }

@@ -1,5 +1,6 @@
 import type { BoardGroupBy, BoardIssueGroup, FieldDefinitionSummary, IssueSummary, LabelSummary, UserSummary } from './types';
 import { readLocalStorageValue } from '../lib/storage';
+import { newViewId } from '../lib/view-id';
 import { readPendingSavedViews, savedViewsStorageKey, writePendingSavedViews } from '../lib/saved-views-account';
 
 export type BoardSortField = 'identifier' | 'title' | 'updatedAt' | 'createdAt' | 'priority';
@@ -421,11 +422,7 @@ export function buildBoardViewSummary(
 }
 
 export function createSavedBoardViewId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-
-  return `board-view-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return newViewId();
 }
 
 const PRIORITY_LABELS: Record<number, string> = {
