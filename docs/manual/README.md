@@ -16,3 +16,5 @@ Use this manual to plan work, follow delivery, and review what people and agents
 12. [Troubleshooting](troubleshooting.md) — diagnose common issues and know when to escalate.
 
 Button names are shown as they appear in the English web app. Some controls depend on your role, selected team, or server configuration. Paths such as `/backlog` are relative to your Involute server.
+
+Reviewers walking an acceptance pass: [acceptance scenarios](../acceptance-scenarios.md) lists the recurring checks and the tests that hold them.

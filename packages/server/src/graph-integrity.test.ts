@@ -139,9 +139,9 @@ describe('hierarchy write boundary', () => {
 
   it('keeps same-team cross-project BLOCKS and PROJECT to DECISION legal', async () => {
     const a = await node('ISSUE'); const b = await node('ISSUE', 'fakechris/lumenbox');
-    await createWorkLink(prisma, { fromId: a.id, toId: b.id, type: 'BLOCKS' });
+    await expect(createWorkLink(prisma, { fromId: a.id, toId: b.id, type: 'BLOCKS' })).resolves.toBeTruthy();
     const project = await node('PROJECT'); const decision = await node('DECISION');
-    await createWorkLink(prisma, { fromId: project.id, toId: decision.id, type: 'CONTAINS' });
+    await expect(createWorkLink(prisma, { fromId: project.id, toId: decision.id, type: 'CONTAINS' })).resolves.toBeTruthy();
   });
 
   it('cascades repository updates across CONTAINS hierarchy when cascadeRepository is true', async () => {

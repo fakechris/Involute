@@ -145,17 +145,17 @@ describe('verify command — error handling', () => {
       'Export directory not found',
     );
   });
+});
 
-  it('throws for directory that exists but has no export files', async () => {
+// Integration tests that require a database connection
+describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
+  it('reports zero export counts for an export directory with no files', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'involute-verify-empty-'));
 
     try {
-      // The verify command checks for export files — an empty dir should still
-      // proceed but report 0 export counts (it reads whatever files exist)
-      // Here we just ensure it doesn't crash on an empty directory with no JSON files
       const result = await runVerify({ file: tempDir });
-      // With no files, entities should all have 0 export counts
       expect(result.entities.length).toBeGreaterThanOrEqual(1);
+      expect(result.entities.every((entity) => entity.exportCount === 0)).toBe(true);
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
@@ -178,10 +178,7 @@ describe('verify command — error handling', () => {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   });
-});
 
-// Integration tests that require a database connection
-describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
   let exportDir: string;
 
   beforeAll(async () => {

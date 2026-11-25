@@ -15,7 +15,7 @@ const DEFAULT_TEAM_KEY = 'INV';
 const TEST_AUTH_TOKEN = 'cli-comments-test-token';
 const TEST_VIEWER_ASSERTION_SECRET = 'cli-comments-viewer-secret';
 
-describe('comment-related CLI commands', () => {
+describe.runIf(Boolean(process.env['DATABASE_URL']))('comment-related CLI commands', () => {
   let prisma: PrismaClient;
   let server: StartedServer;
   let tempDir: string;
