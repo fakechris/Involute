@@ -240,7 +240,7 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, issueRepository, 
   if (error && !graph) {
     return (
       <div className="issue-panel__section issue-neighbourhood">
-        <InlineError>{loadErrorMessage(error, 'Could not load the neighbourhood of this item.')}</InlineError>
+        <InlineError>{loadErrorMessage(error, 'Could not load the neighbourhood of this item.', 'Neighbourhood')}</InlineError>
       </div>
     );
   }

@@ -14,7 +14,7 @@ import {
   type SavedBoardView,
   type SavedBoardViewsEventDetail,
 } from '../board/views';
-import { getSavedViewsAccount } from './saved-views-account';
+import { getSavedViewsAccount, SAVED_VIEWS_RETRY_KEY, takeUnsyncedSavedViews } from './saved-views-account';
 import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION, SAVED_VIEWS_QUERY } from '../work/queries';
 
 /**
@@ -32,6 +32,15 @@ type ServerView = { id: string; ownerId: string; name: string; kind: string; vis
 type AnyView = SavedBoardView | SavedBacklogView;
 
 export const SAVED_VIEWS_MIGRATED_KEY = (accountId: string, teamKey: string) => `involute.views.migrated.${accountId}.${teamKey}`;
+
+function readRetryViews(key: string): AnyView[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? '[]');
+    return Array.isArray(parsed) ? (parsed as AnyView[]) : [];
+  } catch {
+    return [];
+  }
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function fromServer(view: ServerView): AnyView {
@@ -72,8 +81,9 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string, accou
     // Local views the server refused (success=false, e.g. a name over 120 characters) stay in
     // the browser: they may be the only copy (INV-1193). The migration is retried until none are left.
     const refused: Record<'board' | 'backlog', AnyView[]> = { board: [], backlog: [] };
+    const migrating = !window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY(accountId, teamKey));
     // One-time migration: local views the server does not have become private server views.
-    if (!window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY(accountId, teamKey))) {
+    if (migrating) {
       const have = new Set(server.map((view) => view.id));
       for (const kind of ['board', 'backlog'] as const) {
         const local = kind === 'board' ? readSavedBoardViews(teamKey) : readSavedBacklogViews(teamKey);
@@ -88,6 +98,32 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string, accou
       if (refused.board.length === 0 && refused.backlog.length === 0) {
         window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY(accountId, teamKey), new Date().toISOString());
       }
+    }
+    // Views saved before the account was known (INV-2157) are in the local copy, so a first
+    // migration uploads them; otherwise they are uploaded here. A refused one is kept for the
+    // next pull to retry, like a refused migrated view (INV-1193), without retrying the rest.
+    // Only views still in the local list are retried, so a view deleted meanwhile stays deleted,
+    // and the list is kept until the uploads finish, so an interrupted pull loses none.
+    for (const kind of ['board', 'backlog'] as const) {
+      const retryKey = SAVED_VIEWS_RETRY_KEY(accountId, teamKey, kind);
+      const local = new Set((kind === 'board' ? readSavedBoardViews(teamKey) : readSavedBacklogViews(teamKey)).map((view) => view.id));
+      const queued = [...readRetryViews(retryKey), ...(takeUnsyncedSavedViews(kind, teamKey, accountId) as AnyView[])];
+      const early = queued.filter((view, index) => local.has(view.id) && queued.findIndex((other) => other.id === view.id) === index);
+      if (migrating || early.length === 0) {
+        window.localStorage.removeItem(retryKey);
+        continue;
+      }
+      window.localStorage.setItem(retryKey, JSON.stringify(early));
+      const have = new Set(server.map((view) => view.id));
+      for (const view of early) {
+        if (have.has(view.id)) continue;
+        const saved = await upsert(kind, view);
+        if (!isLive()) return;
+        if (saved) server.push(saved);
+        else refused[kind].push(view);
+      }
+      if (refused[kind].length > 0) window.localStorage.setItem(retryKey, JSON.stringify(refused[kind]));
+      else window.localStorage.removeItem(retryKey);
     }
     known = new Map(server.map((view) => [view.id, fromServer(view)]));
     write('board', [...server.filter((view) => view.kind === 'board').map(fromServer), ...refused.board]);

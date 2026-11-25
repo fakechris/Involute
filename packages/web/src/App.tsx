@@ -1,4 +1,5 @@
-import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Suspense, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { getApolloContext } from '@apollo/client/react';
 import { installShortcutGuard } from './lib/shortcut-setting';
 import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams, type NavigateFunction, type NavigateOptions, type To } from 'react-router-dom';
 
@@ -56,9 +57,10 @@ import {
   type AppShellIssueSummary,
   type AppShellTeamSummary,
 } from './lib/app-shell-state';
-import { useAuthenticationFailure } from './lib/apollo';
+import { getAuthToken, getConfiguredViewerAssertion, useAuthenticationFailure } from './lib/apollo';
 import { clearSignInReturn, fetchSessionState, getGoogleLoginUrl, getProviderLoginUrl, logoutSession, readSignInReturn, rememberSignInReturn, type SessionState } from './lib/session';
 import { SAVED_VIEWS_ACCOUNT_EVENT, setSavedViewsAccount } from './lib/saved-views-account';
+import { SAVED_VIEWS_ACCOUNT_QUERY } from './work/queries';
 import { lazyRoute, RouteErrorBoundary } from './lib/lazy-route';
 import { CommentUndoHost } from './undo/CommentUndoHost';
 import { CommitUndoHost } from './undo/CommitUndoHost';
@@ -434,9 +436,32 @@ export function App() {
     }
   }, [atSignInLanding, hasCookieSession, navigate, signInReturn]);
 
+  // Token sign-in (a bearer token and viewer assertion, no cookie session) leaves /auth/session
+  // without a viewer, but GraphQL knows who it is; saved views are kept for that person (INV-2157).
+  const apolloClient = useContext(getApolloContext()).client ?? null;
+  const [tokenAccountId, setTokenAccountId] = useState<string | null>(null);
+  const sessionAuthenticated = Boolean(loadedSession?.authenticated);
+  useEffect(() => {
+    if (!isSessionLoaded || sessionAuthenticated || authenticationFailed || !apolloClient) return;
+    if (getAuthToken() === null && getConfiguredViewerAssertion() === null) return;
+    let cancelled = false;
+    apolloClient
+      .query<{ viewer: { id: string } | null }>({ query: SAVED_VIEWS_ACCOUNT_QUERY, fetchPolicy: 'network-only' })
+      .then((result) => {
+        if (cancelled) return;
+        const id = result.data?.viewer?.id ?? null;
+        setSavedViewsAccount(id);
+        setTokenAccountId(id);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [apolloClient, authenticationFailed, isSessionLoaded, sessionAuthenticated]);
+
   // The saved-views server sync runs for the signed-in account and active team (INV-1196).
   // setSavedViewsAccount runs before setSession, so the sync starts with the account already set.
-  useSavedViewsSync(session?.authenticated ? session.viewer?.id ?? null : null, activeTeamKey);
+  useSavedViewsSync(session?.authenticated ? session.viewer?.id ?? null : authenticationFailed ? null : tokenAccountId, activeTeamKey);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);

@@ -410,6 +410,12 @@
   white-space: nowrap;
 }
 
+/* A note that is a sentence, such as the read-only note on a card, wraps on a narrow screen. */
+.page-note--wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- FilterSearch ---------- */
 
 .filter-search {

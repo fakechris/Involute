@@ -121,6 +121,8 @@ import {
   type SavedBoardView,
   writeSavedBoardViews,
   writeStoredBoardViewState,
+  BOARD_SAVED_VIEWS_EVENT,
+  type SavedBoardViewsEventDetail,
 } from '../board/views';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { SessionEndedContext } from '../components/SessionEndedNotice';
@@ -672,8 +674,16 @@ export function BoardPage() {
     function reloadSavedViews() {
       setSavedBoardViews(readSavedBoardViews(activeTeamKey));
     }
+    // The server sync replaces the list (views saved on another device): a later save keeps them (INV-2157).
+    function syncSavedViews(event: Event) {
+      if ((event as CustomEvent<SavedBoardViewsEventDetail>).detail?.teamKey === activeTeamKey) reloadSavedViews();
+    }
     window.addEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
-    return () => window.removeEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
+    window.addEventListener(BOARD_SAVED_VIEWS_EVENT, syncSavedViews);
+    return () => {
+      window.removeEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
+      window.removeEventListener(BOARD_SAVED_VIEWS_EVENT, syncSavedViews);
+    };
   }, [activeTeamKey]);
 
   useEffect(() => {

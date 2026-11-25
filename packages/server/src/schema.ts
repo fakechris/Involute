@@ -1397,6 +1397,8 @@ const typeDefs = /* GraphQL */ `
     parent: Issue
     children(commitmentStatus: CommitmentStatus): IssueConnection!
     team: Team!
+    "Whether the viewer may change this work: an Editor or Owner of its team, an Admin, a bound agent, or an editor share (INV-832). A team Viewer gets false (INV-2158)."
+    viewerCanWrite: Boolean!
     project: Project
     cycle: Cycle
     projectId: String
@@ -6929,6 +6931,8 @@ const resolvers = {
     },
   },
   Issue: {
+    viewerCanWrite: (parent: IssueParent, _args: unknown, context: GraphQLContext): Promise<boolean> =>
+      assertCanWriteIssue(context.prisma, context, parent.id).then(() => true, () => false),
     hasPendingDeliveryChange: async (parent: IssueParent, _args: unknown, context: GraphQLContext) => (await context.prisma.deliveryChangeSet.count({ where: { workId: parent.id, status: 'PENDING' } })) > 0,
     supersededBy: async (parent: IssueParent, _args: unknown, context: GraphQLContext) => parent.supersededById ? context.prisma.issue.findFirst({ where: { AND: [{ id: parent.supersededById }, buildReadableIssueWhere(context) ?? {}] } }) : null,
     priority: (parent: IssueParent): number => parent.priority,

@@ -87,7 +87,7 @@ export function DeliveryPanel({ workId, compact = false }: { workId: string; com
   const [draftPolicy, setDraftPolicy] = useState<Policy | null>(null);
   const [message, setMessage] = useState('');
   const context = data?.deliveryContext;
-  if (error) return <p role="alert">{loadErrorMessage(error, `Delivery authorization could not be loaded: ${error.message}`)}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Delivery authorization could not be loaded: ${error.message}`, 'Delivery authorization')}</p>;
   if (!context) return null;
   const policy = context.grant ? parsePolicy(context.grant.policyJson) : null;
   if (context.grant && !policy) return <p role="alert">The delivery policy could not be read. Refresh or ask an administrator to inspect the record.</p>;
@@ -146,7 +146,7 @@ function ChangeCard({ change, refresh }: { change: Change; refresh: () => Promis
 
 export function DeliveryChangeQueue({ repository, noRepository, teamKey, bugsOnly, workId, heading = 'Delivery changes' }: { repository?: string | undefined; noRepository?: boolean | undefined; teamKey?: string | null | undefined; bugsOnly?: boolean | undefined; workId?: string | undefined; heading?: string }) {
   const { data, error, refetch, fetchMore, loading } = useQuery<{ deliveryChanges: { nodes: Change[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } }>(QUEUE, { variables: { repository: repository || null, noRepository: noRepository ?? false, teamKey: teamKey ?? null, bugsOnly: bugsOnly ?? false, workId: workId ?? null }, notifyOnNetworkStatusChange: true });
-  if (error) return isAuthenticationError(error) && !workId ? null : <p role="alert">{loadErrorMessage(error, `Delivery changes could not be loaded: ${error.message}`)}</p>;
+  if (error) return isAuthenticationError(error) && !workId ? null : <p role="alert">{loadErrorMessage(error, `Delivery changes could not be loaded: ${error.message}`, 'Delivery changes')}</p>;
   const queue = data?.deliveryChanges;
   if (!queue?.nodes.length) return null;
   return <section className="work-context__section delivery-panel" aria-label={heading}><h2>{heading} · {queue.nodes.length}</h2><p>Approve the business contract and implementation authority together. Final acceptance remains a separate human decision.</p>

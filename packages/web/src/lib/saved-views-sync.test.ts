@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { readSavedBoardViews, writeSavedBoardViews, type BoardViewState } from '../board/views';
 import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION } from '../work/queries';
-import { setSavedViewsAccount } from './saved-views-account';
+import { setSavedViewsAccount, takeUnsyncedSavedViews } from './saved-views-account';
 import { SAVED_VIEWS_MIGRATED_KEY, startSavedViewsSync } from './saved-views-sync';
+import { isViewUuid } from './view-id';
 
 type ServerView = { id: string; ownerId: string; name: string; kind: string; visibility: 'PRIVATE' | 'TEAM'; stateJson: string };
 
@@ -58,6 +59,197 @@ describe('saved views sync', () => {
     expect(deleteCalls(mutate)).toHaveLength(0);
     expect(server.map((view) => view.id)).toEqual([uuid(100)]);
     expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual([uuid(100)]);
+  });
+
+  // INV-2157: in token sign-in the account is known only after a GraphQL round trip; a view saved before that is kept.
+  it('keeps a view saved before the account was known and uploads it once the account is known', async () => {
+    setSavedViewsAccount(null);
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'Early', state: BOARD_STATE }]);
+    expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['Early']);
+
+    setSavedViewsAccount('user-a');
+    expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['Early']);
+    const server: ServerView[] = [serverView(uuid(1), 'Other device')];
+    const { client, mutate } = fakeClient(server);
+    stop = startSavedViewsSync(client, 'INV', 'user-a');
+
+    await vi.waitFor(() => expect(readSavedBoardViews('INV').map((view) => view.name).sort()).toEqual(['Early', 'Other device']));
+    expect(upsertCalls(mutate)).toHaveLength(1);
+    expect(deleteCalls(mutate)).toHaveLength(0);
+    expect(server.map((view) => view.name).sort()).toEqual(['Early', 'Other device']);
+  });
+
+  it('uploads a view saved before the account was known once on a first sync', async () => {
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'Early', state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    // The early view gets its fixed UUID when the account is known (INV-2157).
+    const adopted = readSavedBoardViews('INV').map((view) => view.id);
+    expect(adopted.every(isViewUuid)).toBe(true);
+    const server: ServerView[] = [];
+    const { client, mutate } = fakeClient(server);
+    stop = startSavedViewsSync(client, 'INV', 'user-a');
+
+    await vi.waitFor(() => expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual(adopted));
+    expect(upsertCalls(mutate)).toHaveLength(1);
+    expect(server.map((view) => view.name)).toEqual(['Early']);
+  });
+
+  it('keeps a refused view saved before the account was known and retries it on the next pull', async () => {
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    setSavedViewsAccount(null);
+    const tooLong = 'x'.repeat(121);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: tooLong, state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    // The early view gets its fixed UUID when the account is known (INV-2157).
+    const adopted = readSavedBoardViews('INV').map((view) => view.id);
+    expect(adopted.every(isViewUuid)).toBe(true);
+    const server: ServerView[] = [];
+    const first = fakeClient(server);
+    stop = startSavedViewsSync(first.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(first.mutate)).toHaveLength(1));
+    await flush();
+    expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual(adopted);
+    stop();
+
+    // A reload: the next pull retries the view instead of replacing it with the server's empty list.
+    const second = fakeClient(server);
+    stop = startSavedViewsSync(second.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(second.mutate)).toHaveLength(1));
+    await flush();
+    expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual(adopted);
+  });
+
+  it('retries only the refused early view, so a view deleted on another device does not come back', async () => {
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'x'.repeat(121), state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    // The early view gets its fixed UUID when the account is known (INV-2157).
+    const adopted = readSavedBoardViews('INV').map((view) => view.id);
+    expect(adopted.every(isViewUuid)).toBe(true);
+    const server: ServerView[] = [serverView(uuid(1), 'Deleted elsewhere')];
+    const first = fakeClient(server);
+    stop = startSavedViewsSync(first.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(readSavedBoardViews('INV')).toHaveLength(2));
+    stop();
+
+    server.splice(0, 1);
+    const second = fakeClient(server);
+    stop = startSavedViewsSync(second.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(second.mutate)).toHaveLength(1));
+    await flush();
+    expect(upsertCalls(second.mutate)[0]![0]).toMatchObject({ variables: { input: { name: 'x'.repeat(121) } } });
+    expect(server).toHaveLength(0);
+    expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual(adopted);
+  });
+
+  it('does not retry a refused early view that was deleted in this browser', async () => {
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'x'.repeat(121), state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    const server: ServerView[] = [];
+    const first = fakeClient(server);
+    stop = startSavedViewsSync(first.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(first.mutate)).toHaveLength(1));
+    await flush();
+    stop();
+    writeSavedBoardViews('INV', []);
+
+    const second = fakeClient(server);
+    stop = startSavedViewsSync(second.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(second.query).toHaveBeenCalled());
+    await flush();
+    expect(upsertCalls(second.mutate)).toHaveLength(0);
+    expect(readSavedBoardViews('INV')).toEqual([]);
+  });
+
+  it('keeps a refused early view for the next pull when a retry is interrupted', async () => {
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'x'.repeat(121), state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    // The early view gets its fixed UUID when the account is known (INV-2157).
+    const adopted = readSavedBoardViews('INV').map((view) => view.id);
+    expect(adopted.every(isViewUuid)).toBe(true);
+    const server: ServerView[] = [];
+    const first = fakeClient(server);
+    stop = startSavedViewsSync(first.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(first.mutate)).toHaveLength(1));
+    await flush();
+    stop();
+
+    const hanging = fakeClient(server);
+    hanging.mutate.mockImplementation(() => new Promise(() => {}));
+    stop = startSavedViewsSync(hanging.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(hanging.mutate).toHaveBeenCalledTimes(1));
+    stop();
+
+    const third = fakeClient(server);
+    stop = startSavedViewsSync(third.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(upsertCalls(third.mutate)).toHaveLength(1));
+    await flush();
+    expect(readSavedBoardViews('INV').map((view) => view.id)).toEqual(adopted);
+  });
+
+  // A reload drops what the page held in memory; storage is what survives it.
+  const reload = () => { takeUnsyncedSavedViews('board', 'INV', 'user-a'); takeUnsyncedSavedViews('backlog', 'INV', 'user-a'); };
+  const upsertedNames = (mutate: ReturnType<typeof vi.fn>) => upsertCalls(mutate).map(([options]) => (options as { variables: { input: { name: string } } }).variables.input.name);
+
+  it('keeps an early view across a reload after the account is known and before the first sync answers (INV-2157)', async () => {
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'Early', state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    reload();
+
+    const server: ServerView[] = [serverView(uuid(1), 'Original')];
+    const { client, mutate } = fakeClient(server);
+    stop = startSavedViewsSync(client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(readSavedBoardViews('INV').map((view) => view.name).sort()).toEqual(['Early', 'Original']));
+    expect(upsertedNames(mutate)).toEqual(['Early']);
+    expect(server.filter((view) => view.name === 'Early')).toHaveLength(1);
+    expect(server.find((view) => view.name === 'Original')).toEqual(serverView(uuid(1), 'Original'));
+  });
+
+  it('uploads an early view once when a reload follows the server accepting it (INV-2157)', async () => {
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'Early', state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+
+    const server: ServerView[] = [serverView(uuid(1), 'Original')];
+    const first = fakeClient(server);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const accept = first.mutate.getMockImplementation()!;
+    first.mutate.mockImplementation(async (options) => { const answer = await accept(options); await gate; return answer; });
+    stop = startSavedViewsSync(first.client, 'INV', 'user-a');
+    // The server stored the view; the page reloads before the sync records that.
+    await vi.waitFor(() => expect(server.some((view) => view.name === 'Early')).toBe(true));
+    stop();
+    release();
+    await flush();
+    reload();
+
+    const second = fakeClient(server);
+    stop = startSavedViewsSync(second.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(second.query).toHaveBeenCalled());
+    await flush();
+    await flush();
+    expect(server.filter((view) => view.name === 'Early')).toHaveLength(1);
+    expect(readSavedBoardViews('INV').map((view) => view.name).sort()).toEqual(['Early', 'Original']);
+    expect(server.find((view) => view.name === 'Original')).toEqual(serverView(uuid(1), 'Original'));
+  });
+
+  it('gives a view saved before sign-in to nobody else once an account signs out', () => {
+    setSavedViewsAccount(null);
+    writeSavedBoardViews('INV', [{ id: 'view-early', name: 'Early', state: BOARD_STATE }]);
+    setSavedViewsAccount('user-a');
+    setSavedViewsAccount(null);
+    expect(readSavedBoardViews('INV')).toEqual([]);
   });
 
   it('still deletes a server view that was removed locally', async () => {

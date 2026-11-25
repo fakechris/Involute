@@ -2,6 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
+
+import { READ_ONLY_TEAM_MESSAGE } from '../lib/apollo';
 import { InReviewPage } from './InReviewPage';
 
 const mockRunReview = vi.fn();
@@ -311,5 +314,42 @@ describe('InReviewPage', () => {
     } finally {
       reviewItems[0]!.description = original;
     }
+  });
+});
+
+// INV-2158: a team Viewer reads the queue but cannot Accept or Return.
+describe('InReviewPage for a team Viewer', () => {
+  const first = reviewItems[0]! as { viewerCanWrite?: boolean };
+  afterEach(() => {
+    delete first.viewerCanWrite;
+  });
+
+  it('shows no Accept, Return or selection on work the viewer may only read, and says why', () => {
+    first.viewerCanWrite = false;
+    render(<MemoryRouter><InReviewPage /></MemoryRouter>);
+    const readOnly = screen.getByRole('listitem', { name: 'INV-101 in review' });
+    expect(within(readOnly).queryByRole('button', { name: 'Accept' })).toBeNull();
+    expect(within(readOnly).queryByRole('button', { name: 'Return' })).toBeNull();
+    expect(within(readOnly).queryByRole('checkbox')).toBeNull();
+    expect(within(readOnly).getByRole('note')).toHaveTextContent(READ_ONLY_TEAM_MESSAGE);
+    fireEvent.click(screen.getByRole('button', { name: 'Select all visible' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+  });
+
+  it('says edit access is missing, not "refresh and retry", when the server refuses a Return', async () => {
+    mockRunReview.mockRejectedValueOnce(new CombinedGraphQLErrors({ errors: [{ message: 'You do not have edit access to this team.', extensions: { code: 'FORBIDDEN' } }] }));
+    render(<MemoryRouter><InReviewPage /></MemoryRouter>);
+    const card = screen.getByRole('listitem', { name: 'INV-101 in review' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Return' }));
+    expect(await within(card).findByRole('alert')).toHaveTextContent(READ_ONLY_TEAM_MESSAGE);
+    expect(screen.queryByText(/Refresh and retry failed rows/)).toBeNull();
+  });
+
+  it('says the same when a bulk Return is refused for edit access', async () => {
+    mockRunReview.mockRejectedValue(new CombinedGraphQLErrors({ errors: [{ message: 'You do not have edit access to this team.', extensions: { code: 'FORBIDDEN' } }] }));
+    render(<MemoryRouter><InReviewPage /></MemoryRouter>);
+    fireEvent.click(screen.getByLabelText('Select INV-101'));
+    fireEvent.click(screen.getByRole('button', { name: 'Return selected' }));
+    expect((await screen.findAllByText(READ_ONLY_TEAM_MESSAGE)).length).toBeGreaterThan(0);
   });
 });
