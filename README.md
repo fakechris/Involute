@@ -12,7 +12,7 @@ English | [中文](README.zh.md) | [User manual](docs/manual/README.md)
 > Codex, Claude Code, and other agents connect over MCP. People use the web app to plan,
 > edit, and review work. Headless operation is supported; no LLM is required.
 
-**Status** M0 migration done · M1 VPS self-hosting operational · M2 OAuth + RBAC done · work-graph kernel (K0–K6) shipped · Linear replacement = M5 · Apache-2.0
+**Status** latest release [`npm-v0.3.0`](docs/releases/npm-v0.3.0.md) (2026-11-24) · running in production at [involute.lumenopen.com](https://involute.lumenopen.com/) · work-graph kernel, autonomy policy L0–L3, bug and incident flows shipped · Apache-2.0
 
 ## 🖥️ Preview
 
@@ -23,13 +23,16 @@ English | [中文](README.zh.md) | [User manual](docs/manual/README.md)
 ## ✨ Highlights
 
 - 🧠 **Work-graph kernel** — every work item is a node with a stable identity (`SON-18`, `INV-142`), a delivery contract (outcome, scope, constraints, acceptance, verification), and typed links (`contains`, `blocks`, `derived_from`, `discovered_during`).
-- 🤖 **MCP-native agent protocol** — `work_search` / `work_get_context` / `work_list_ready` / `work_propose` / `work_commit` / `work_claim` / `work_update` / `run_report` / `evidence_attach` over Streamable HTTP MCP at `/mcp`, with a read-only mirror at `/mcp/readonly`.
+- 🤖 **MCP-native agent protocol** — 21 grouped tools over Streamable HTTP MCP at `/mcp` (read-only mirror at `/mcp/readonly`): `work_search` / `work_get_context` / `work_list_ready` / `work_propose` / `work_file_bug` / `work_claim` / `work_update` / `run_report` / `evidence` / `agent_inbox` and more. `protocol_get_guide` returns the full protocol; `/llms.txt` indexes the docs.
 - 🛡️ **Human gates where they matter** — proposals normally enter as *candidates* for a decision. **Run complete is not work accepted**; people decide unless an explicit rule such as an enabled [autonomy policy](docs/autonomy-policy.md) applies.
 - 🧾 **Runs + evidence** — every execution attempt is a run with phase reports, blockers, and attached PR / test / artifact URLs; self-reported evidence stays in review until a human accepts it.
-- 🖥️ **Web workspace** — create, edit, and move committed work on Board and Backlog; decide on proposals in Candidates, review evidence, and see pending decisions in Needs you.
+- 🖥️ **Web workspace** — create, edit, and move committed work on Board and Backlog; decide on proposals in Candidates, review evidence in In Review, and find every decision waiting on you in **Needs you**. Undo, custom fields, saved views, keyboard-first navigation, one design system.
+- ⚖️ **Autonomy policy L0–L3** — per team and project, an [autonomy policy](docs/autonomy-policy.md) decides what an agent may commit, accept or delegate on its own; every automatic decision is audited and a person can return it.
+- 🐞 **Bugs and incidents** — zero-bug triage with SLA and triage rotation, regressions and duplicates, Type: Incident with severity, impact timestamps, postmortem and follow-up deadlines; the **Involute Capture** Chrome extension files a bug from any page.
+- 🔎 **Search and graph** — one ranked search (keywords, Chinese full text, local semantic) for ⌘K, boards and agents; issue neighbourhood maps, project graphs, timelines, delivery latency and burndown.
 - 📥 **Linear import loop** — export one Linear team snapshot, import, verify, and view it on the board; historical commitments load in once, then the kernel takes over.
-- 📦 **Self-hostable** — single `involute-aio` container, full compose stack, published Docker Hub images, Ansible playbooks, GitHub Actions deploy, and Postgres backup/restore scripts.
-- 🔐 **Auth & RBAC** — Google OAuth browser sessions, bearer tokens with read-only scopes for CLI and agents, signed viewer assertions, `PUBLIC`/`PRIVATE` teams, and an admin email allowlist.
+- 📦 **Self-hostable** — single `involute-aio` container, full compose stack, published Docker Hub images, Ansible playbooks, a private Kubernetes deployment, per-team GitHub App connections, and verified backup / restore scripts.
+- 🔐 **Auth & RBAC** — Google OAuth sessions, invite-only sign-in with approved domains, workspace roles Admin / Member / Guest, team roles Viewer / Editor / Owner, project sharing, revocable MCP-only agent credentials ([docs/permissions.md](docs/permissions.md)).
 - 🧰 **CLI** — `involute` for config, teams, issues, labels, comments, import/export, and viewer assertions.
 
 ## 🚀 Quick start
@@ -59,13 +62,42 @@ involute config set token YOUR_AUTH_TOKEN
 involute teams list
 ```
 
+## 🌐 Where to find things
+
+| What | Where |
+|---|---|
+| Hosted instance (this project's own tracker) | <https://involute.lumenopen.com/> |
+| User manual | [docs/manual/README.md](docs/manual/README.md) |
+| Agent setup (MCP clients, tokens) | [docs/agent-setup.md](docs/agent-setup.md) · skill pack [skills/involute/SKILL.md](skills/involute/SKILL.md) |
+| Agent protocol (rules every agent follows) | [AGENTS.md](AGENTS.md) · `protocol_get_guide` over MCP · `GET /llms.txt` |
+| API reference | [docs/api.md](docs/api.md) |
+| Operator runbook (deploy, backup, restore, smoke) | [docs/ops.md](docs/ops.md) · [docs/upgrading.md](docs/upgrading.md) |
+| Release notes | [docs/releases/](docs/releases/) — latest [npm-v0.3.0](docs/releases/npm-v0.3.0.md) |
+
+Screens in the web app (paths are relative to your server):
+
+| Path | Screen |
+|---|---|
+| `/` · `/backlog` | Board and Backlog — committed work only |
+| `/candidates` | Candidates — proposals waiting to be committed or declined |
+| `/in-review` | In Review — finished work to accept or return |
+| `/todo` | Needs you — every decision waiting on you |
+| `/search` · `/views` | Search (IQL) and saved views |
+| `/graph` · `/projects` · `/milestones` · `/delivery` | Work graph, projects, milestones, delivery latency and burndown |
+| `/bugs` · `/incidents` | Bug triage and metrics, incidents with MTTR / MTTM |
+| `/agents` | Agent directory and profiles |
+| `/hygiene` · `/ops` | Work health, operations (sync, queues, webhooks, traceability) |
+| `/settings` | Workspace, teams, agents, GitHub, autonomy, fields |
+
+Server endpoints: `/graphql`, `/mcp`, `/mcp/readonly`, `/health` (liveness), `/ready` (readiness), `/llms.txt`.
+
 ## 🔁 The agent loop
 
 ```text
 work_list_ready / work_search → work_get_context → work_claim
 (local plan — do not upload)
 work_update or work_propose for newly confirmed work
-run_report + evidence_attach → In Review (human accepts → Done)
+run_report(completed, followups) + evidence(action: 'attach') → In Review (a person accepts → Done)
 ```
 
 Four state machines, deliberately not collapsed:
@@ -81,11 +113,10 @@ In shadow mode, GitHub merges and CLEAR observations do not change the workflow 
 
 ## 🗺️ Current status
 
-- `M0` single-team migration acceptance is done.
-- `M2` Google OAuth, session auth, admin bootstrap, and team RBAC are done.
-- `M1` VPS self-hosting is operational. Operator runbook: [docs/ops.md](docs/ops.md).
-- The public domain serves HTTPS with Google OAuth. Backup and restore scripts are `scripts/postgres-backup.sh` and `scripts/postgres-restore.sh`.
-- The Linear-replacement track is M5. K0–K6 ship as the work-graph kernel: MCP at `/mcp`, propose/commit/claim/reject, runs/evidence, and observation UI (`/candidates`, `/graph`, `/work/:id`). The board projects committed issues only.
+- Latest release: [`npm-v0.3.0`](docs/releases/npm-v0.3.0.md) (2026-11-24), about 330 pull requests after `npm-v0.2.0`.
+- `M0` single-team migration and `M2` auth / RBAC are done; `M1` VPS self-hosting is operational — production runs `main` by immutable `sha-<12>` image with a pre-deploy backup and a daily verified backup ([docs/ops.md](docs/ops.md)).
+- `M5` work-graph kernel: K0–K6 plus autonomy policy L0–L3, bug and incident flows, Needs you, search, delivery packages and external executors.
+- Open: an off-box copy of the daily backups.
 
 See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/milestones.md), [docs/vision.md](docs/vision.md), and [docs/api.md](docs/api.md) for the current product state and API surface.
 
@@ -95,11 +126,14 @@ See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/
 - `packages/web` — React + Vite kanban UI
 - `packages/cli` — `involute` CLI for config, import/export, teams, issues, labels, and comments
 - `packages/shared` — shared TypeScript utilities
+- `packages/extension` — Involute Capture, a Chrome extension that files bugs from any page
+- `ops/` — Ansible playbooks and the private Kubernetes deployment (`ops/k8s/involute-private`)
 - `skills/` — agent skill pack (search, propose, claim, report, evidence, setup)
 - `docs/api.md` — HTTP and GraphQL API reference
 - `docs/ops.md` — production deploy, rollback, logs, backup, restore, smoke
 - `docs/vision.md` — current product vision
 - `docs/milestones.md` — active milestones and sequencing
+- `docs/manual/` — task-oriented user manual
 
 ## Environment
 
@@ -415,11 +449,11 @@ The web UI can use the same signed assertion via `VITE_INVOLUTE_VIEWER_ASSERTION
 
 ## Auth and permissions
 
-- Browser auth now supports Google OAuth plus session cookies.
+- Browser auth supports Google OAuth plus session cookies; sign-in is invite-only plus approved domains, with workspace roles Admin / Member / Guest ([docs/permissions.md](docs/permissions.md)).
 - `AUTH_TOKEN` and viewer assertions remain available for trusted CLI/dev flows.
 - System admins can be bootstrapped through `ADMIN_EMAIL_ALLOWLIST` or `pnpm --filter @turnkeyai/involute-server admin:bootstrap user@example.com`.
 - Teams now have `PUBLIC` / `PRIVATE` visibility.
-- Team edits are gated by membership role: `EDITOR` or `OWNER`.
+- Team edits are gated by membership role: Editor (`EDITOR`) or Owner.
 - Team access is managed in the team's Members and Settings pages (`/teams/<KEY>/members` and `/teams/<KEY>/settings`) or through GraphQL mutations: `teamUpdateAccess`, `teamMembershipUpsert`, and `teamMembershipRemove`.
 
 ## Database migrations
@@ -464,7 +498,7 @@ Browser E2E:
 pnpm e2e
 ```
 
-The Playwright suite verifies the core board lifecycle: create, update, comment, delete comment, and delete issue.
+The Playwright suite walks the board lifecycle, the Getting started journey and the MCP / UI conformance checks; [docs/acceptance-scenarios.md](docs/acceptance-scenarios.md) maps each recurring acceptance check to the test that holds it.
 
 ## API reference
 
@@ -474,13 +508,23 @@ The current HTTP and GraphQL surface is documented in [docs/api.md](docs/api.md)
 
 Tag-driven npm publishing is wired through [`.github/workflows/npm-publish.yml`](.github/workflows/npm-publish.yml).
 
-Release notes for the current Agent-native kernel line are in [docs/releases/npm-v0.2.0.md](docs/releases/npm-v0.2.0.md).
+Release notes live in [docs/releases/](docs/releases/); the latest is [npm-v0.3.0](docs/releases/npm-v0.3.0.md).
+
+A release is two tags on the same `main` commit, plus its notes file:
+
+```bash
+git tag npm-v0.3.0 && git tag docker-v0.3.0
+git push origin npm-v0.3.0 docker-v0.3.0
+gh release create npm-v0.3.0 --notes-file docs/releases/npm-v0.3.0.md
+```
+
+`npm-v*` publishes the npm packages below; `docker-v*` adds a version tag to the Docker images. Production is not deployed from a tag — it moves by `sha-<12>` image ([docs/ops.md](docs/ops.md)).
 
 Release tags use this format:
 
 ```bash
-git tag npm-v1.0.0
-git push origin npm-v1.0.0
+git tag npm-v<version>
+git push origin npm-v<version>
 ```
 
 That workflow publishes the current package set in version lockstep:
@@ -563,11 +607,10 @@ pnpm --filter @turnkeyai/involute exec node dist/index.js import team --token "$
 
 ## Current focus
 
-- Finish public-domain VPS deployment and validate Google OAuth callback plus session flow
-- Run one real Postgres backup and restore drill
-- Keep Google OAuth, admin bootstrap, and team RBAC stable while deployment hardens
-- Move database changes through Prisma migrations instead of schema push shortcuts
-- Keep the compose stack, CI, and deploy automation reproducible while the product boundary hardens
+- Keep production trustworthy: verified daily backups, an off-box copy, a restore drill each release
+- Keep people's decisions in one place (Needs you) and every rule that asks a person on a screen
+- Grow agent autonomy only through the audited policy levels, never around them
+- Keep words on screen and UI primitives consistent ([docs/design-system.md](docs/design-system.md))
 
 Railway remains a possible later hosting path, but it is not the current blocking milestone. See [docs/current-status.md](docs/current-status.md), [docs/vision.md](docs/vision.md), and [docs/milestones.md](docs/milestones.md) for the current direction.
 

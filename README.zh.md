@@ -12,7 +12,7 @@
 > Codex、Claude Code 等 Agent 通过 MCP 连接；用户可以在 Web 界面规划、编辑和验收工作。
 > 支持无头（headless）运行，可自托管，不依赖 LLM。
 
-**状态** M0 迁移验收完成 · M1 VPS 自托管已上线 · M2 OAuth + RBAC 完成 · 工作图内核（K0–K6）已交付 · Linear 替代线 = M5 · Apache-2.0
+**状态** 最新发布 [`npm-v0.3.0`](docs/releases/npm-v0.3.0.md)（2026-11-24）· 生产运行于 [involute.lumenopen.com](https://involute.lumenopen.com/) · 工作图内核、自治策略 L0–L3、缺陷与事故流程已交付 · Apache-2.0
 
 ## 🖥️ 界面预览
 
@@ -23,13 +23,16 @@
 ## ✨ 特性
 
 - 🧠 **工作图内核（Work-graph kernel）** —— 每个工作项都是图上的节点：稳定身份（`SON-18`、`INV-142`）、交付契约（outcome、scope、约束、验收、验证方式）、类型化链接（`contains`、`blocks`、`derived_from`、`discovered_during`）。
-- 🤖 **MCP 原生 Agent 协议** —— `work_search` / `work_get_context` / `work_list_ready` / `work_propose` / `work_commit` / `work_claim` / `work_update` / `run_report` / `evidence_attach`，走 Streamable HTTP MCP（`/mcp`），并带只读镜像 `/mcp/readonly`。
+- 🤖 **MCP 原生 Agent 协议** —— 21 个分组工具，走 Streamable HTTP MCP（`/mcp`，只读镜像 `/mcp/readonly`）：`work_search` / `work_get_context` / `work_list_ready` / `work_propose` / `work_file_bug` / `work_claim` / `work_update` / `run_report` / `evidence` / `agent_inbox` 等。`protocol_get_guide` 返回完整协议，`/llms.txt` 列出文档索引。
 - 🛡️ **关键处设人类闸门** —— 提案通常先进入 *candidate*（候选）队列等待决策。**Run 完成不等于工作已验收**；除非符合已启用的[自治策略](docs/autonomy-policy.md)等明确规则，否则由人工决定。
 - 🧾 **Run + 证据** —— 每次执行尝试都是一条 run：阶段报告、阻塞、附带的 PR / 测试 / 产物链接；自报证据保留在 In Review，等待人工验收。
-- 🖥️ **Web 工作区** —— 在看板和待办列表创建、编辑及流转已承诺的工作，在 Candidates 决定是否承诺提案，审查证据，并在 Needs you 查看待决策事项。
+- 🖥️ **Web 工作区** —— 在看板和待办列表创建、编辑及流转已承诺的工作，在 Candidates 决定是否承诺提案，在 In Review 审查证据，在 **Needs you** 一处看到所有等你决定的事。支持撤销、自定义字段、保存视图、键盘优先操作，统一设计规范。
+- ⚖️ **自治策略 L0–L3** —— 按团队和项目设定的[自治策略](docs/autonomy-policy.md)决定 Agent 可以自行承诺、验收或委派什么；每个自动决定都有审计，人可以退回。
+- 🐞 **缺陷与事故** —— 零缺陷分诊（SLA、值班轮换）、回归与重复；Type: Incident 带严重度、影响时间戳、复盘和后续项期限；**Involute Capture** Chrome 扩展可从任意页面提交缺陷。
+- 🔎 **搜索与工作图** —— 一个排序搜索（关键词、中文全文、本地语义）服务 ⌘K、看板和 Agent；工单邻域图、项目图、时间线、交付时延与燃尽图。
 - 📥 **Linear 导入闭环** —— 导出一个 Linear 团队快照，导入、校验、上看板；历史承诺一次性载入，之后由内核接管。
-- 📦 **可自托管** —— 单容器 `involute-aio`、完整 compose 栈、Docker Hub 发布镜像、Ansible playbook、GitHub Actions 部署、Postgres 备份/恢复脚本。
-- 🔐 **认证与 RBAC** —— Google OAuth 浏览器会话、带只读 scope 的 Bearer token（CLI 与 Agent 用）、签名 viewer assertion、团队 `PUBLIC`/`PRIVATE` 可见性、管理员邮箱 allowlist。
+- 📦 **可自托管** —— 单容器 `involute-aio`、完整 compose 栈、Docker Hub 发布镜像、Ansible playbook、私有化 Kubernetes 部署、按团队的 GitHub App 连接、带校验的备份/恢复脚本。
+- 🔐 **认证与 RBAC** —— Google OAuth 会话、仅受邀与批准域名登录、工作区角色 Admin / Member / Guest、团队角色 Viewer / Editor / Owner、项目分享、可撤销且仅限 MCP 的 Agent 凭证（[docs/permissions.md](docs/permissions.md)）。
 - 🧰 **CLI** —— `involute` 管理 config、teams、issues、labels、comments、导入/导出、viewer assertion。
 
 ## 🚀 快速开始
@@ -59,13 +62,42 @@ involute config set token YOUR_AUTH_TOKEN
 involute teams list
 ```
 
+## 🌐 入口导航
+
+| 内容 | 位置 |
+|---|---|
+| 在线实例（本项目自己的工作台） | <https://involute.lumenopen.com/> |
+| 用户手册 | [docs/manual/README.md](docs/manual/README.md) |
+| Agent 接入（MCP 客户端、token） | [docs/agent-setup.md](docs/agent-setup.md) · 技能包 [skills/involute/SKILL.md](skills/involute/SKILL.md) |
+| Agent 协议（所有 Agent 遵守的规则） | [AGENTS.md](AGENTS.md) · MCP 的 `protocol_get_guide` · `GET /llms.txt` |
+| API 参考 | [docs/api.md](docs/api.md) |
+| 运维手册（部署、备份、恢复、冒烟） | [docs/ops.md](docs/ops.md) · [docs/upgrading.md](docs/upgrading.md) |
+| 发布说明 | [docs/releases/](docs/releases/) —— 最新 [npm-v0.3.0](docs/releases/npm-v0.3.0.md) |
+
+Web 应用中的页面（路径相对于你的服务器）：
+
+| 路径 | 页面 |
+|---|---|
+| `/` · `/backlog` | 看板与 Backlog —— 只显示已承诺的工作 |
+| `/candidates` | Candidates —— 等待承诺或拒绝的提案 |
+| `/in-review` | In Review —— 待验收或退回的已完成工作 |
+| `/todo` | Needs you —— 所有等你决定的事 |
+| `/search` · `/views` | 搜索（IQL）与保存的视图 |
+| `/graph` · `/projects` · `/milestones` · `/delivery` | 工作图、项目、里程碑、交付时延与燃尽 |
+| `/bugs` · `/incidents` | 缺陷分诊与指标、事故与 MTTR / MTTM |
+| `/agents` | Agent 目录与详情 |
+| `/hygiene` · `/ops` | 工作健康度、运维（同步、队列、webhook、溯源） |
+| `/settings` | 工作区、团队、Agent、GitHub、自治策略、字段 |
+
+服务端端点：`/graphql`、`/mcp`、`/mcp/readonly`、`/health`（存活）、`/ready`（就绪）、`/llms.txt`。
+
 ## 🔁 Agent 工作循环
 
 ```text
 work_list_ready / work_search → work_get_context → work_claim
 （本地做计划 —— 不要上传）
 work_update 或 work_propose 处理新确认的工作
-run_report + evidence_attach → In Review（人类接受 → Done）
+run_report(completed, followups) + evidence(action: 'attach') → In Review（人验收 → Done）
 ```
 
 四条状态机，刻意不合并：
@@ -81,11 +113,10 @@ run_report + evidence_attach → In Review（人类接受 → Done）
 
 ## 🗺️ 当前状态
 
-- `M0` 单团队迁移验收完成。
-- `M2` Google OAuth、会话认证、管理员引导、团队 RBAC 完成。
-- `M1` VPS 自托管已上线。运维手册：[docs/ops.md](docs/ops.md)。
-- 公网域名已走 HTTPS + Google OAuth。备份/恢复脚本：`scripts/postgres-backup.sh` 与 `scripts/postgres-restore.sh`。
-- Linear 替代线是 M5。K0–K6 已作为工作图内核交付：`/mcp` 上的 MCP、propose/commit/claim/reject、runs/evidence、观察界面（`/candidates`、`/graph`、`/work/:id`）。看板只投影已 commit 的 issue。
+- 最新发布：[`npm-v0.3.0`](docs/releases/npm-v0.3.0.md)（2026-11-24），距 `npm-v0.2.0` 约 330 个 PR。
+- `M0` 单团队迁移与 `M2` 认证 / RBAC 已完成；`M1` VPS 自托管已上线 —— 生产按不可变 `sha-<12>` 镜像运行 `main`，每次部署前备份，并有每日校验备份（[docs/ops.md](docs/ops.md)）。
+- `M5` 工作图内核：K0–K6，加上自治策略 L0–L3、缺陷与事故流程、Needs you、搜索、交付包与外部执行器。
+- 待办：每日备份的异地副本。
 
 当前产品状态与 API 面见 [docs/current-status.md](docs/current-status.md)、[docs/milestones.md](docs/milestones.md)、[docs/vision.md](docs/vision.md)、[docs/api.md](docs/api.md)。
 
@@ -95,11 +126,14 @@ run_report + evidence_attach → In Review（人类接受 → Done）
 - `packages/web` —— React + Vite 看板 UI
 - `packages/cli` —— `involute` CLI：config、导入/导出、teams、issues、labels、comments
 - `packages/shared` —— 共享 TypeScript 工具
+- `packages/extension` —— Involute Capture，可从任意页面提交缺陷的 Chrome 扩展
+- `ops/` —— Ansible playbook 与私有化 Kubernetes 部署（`ops/k8s/involute-private`）
 - `skills/` —— Agent skill 包（搜索、propose、claim、汇报、证据、接入）
 - `docs/api.md` —— HTTP 与 GraphQL API 参考
 - `docs/ops.md` —— 生产部署、回滚、日志、备份、恢复、冒烟
 - `docs/vision.md` —— 当前产品愿景
 - `docs/milestones.md` —— 活跃里程碑与排期
+- `docs/manual/` —— 按任务组织的用户手册
 
 ## 环境变量
 
@@ -415,11 +449,11 @@ Web UI 可通过 `VITE_INVOLUTE_VIEWER_ASSERTION` 或 localStorage 键 `involute
 
 ## 认证与权限
 
-- 浏览器认证支持 Google OAuth + 会话 cookie。
+- 浏览器认证支持 Google OAuth + 会话 cookie；登录仅限受邀者与批准域名，工作区角色为 Admin / Member / Guest（[docs/permissions.md](docs/permissions.md)）。
 - `AUTH_TOKEN` 与 viewer assertion 仍可用于可信的 CLI/开发流程。
 - 系统管理员可通过 `ADMIN_EMAIL_ALLOWLIST` 或 `pnpm --filter @turnkeyai/involute-server admin:bootstrap user@example.com` 引导。
 - 团队有 `PUBLIC` / `PRIVATE` 可见性。
-- 团队编辑按成员角色门控：`EDITOR` 或 `OWNER`。
+- 团队编辑按成员角色门控：Editor（`EDITOR`）或 Owner。
 - 团队访问可在团队的 Members 和 Settings 页面（`/teams/<KEY>/members`、`/teams/<KEY>/settings`）管理，也可通过 GraphQL mutations：`teamUpdateAccess`、`teamMembershipUpsert`、`teamMembershipRemove`。
 
 ## 数据库迁移
@@ -464,7 +498,7 @@ pnpm build
 pnpm e2e
 ```
 
-Playwright 套件验证核心看板生命周期：创建、更新、评论、删评论、删 issue。
+Playwright 套件覆盖看板生命周期、Getting started 旅程和 MCP / UI 一致性检查；[docs/acceptance-scenarios.md](docs/acceptance-scenarios.md) 把每项常规验收对应到守护它的测试。
 
 ## API 参考
 
@@ -474,13 +508,23 @@ Playwright 套件验证核心看板生命周期：创建、更新、评论、删
 
 Tag 驱动的 npm 发布接在 [`.github/workflows/npm-publish.yml`](.github/workflows/npm-publish.yml)。
 
-当前 Agent 原生内核线的发布说明见 [docs/releases/npm-v0.2.0.md](docs/releases/npm-v0.2.0.md)。
+发布说明在 [docs/releases/](docs/releases/)，最新为 [npm-v0.3.0](docs/releases/npm-v0.3.0.md)。
+
+一次发布 = 同一个 `main` 提交上的两个 tag，加上对应的说明文件：
+
+```bash
+git tag npm-v0.3.0 && git tag docker-v0.3.0
+git push origin npm-v0.3.0 docker-v0.3.0
+gh release create npm-v0.3.0 --notes-file docs/releases/npm-v0.3.0.md
+```
+
+`npm-v*` 发布下列 npm 包；`docker-v*` 给 Docker 镜像加版本 tag。生产不从 tag 部署，而是按 `sha-<12>` 镜像推进（[docs/ops.md](docs/ops.md)）。
 
 发布 tag 格式：
 
 ```bash
-git tag npm-v1.0.0
-git push origin npm-v1.0.0
+git tag npm-v<version>
+git push origin npm-v<version>
 ```
 
 该 workflow 以版本 lockstep 发布当前包集合：
@@ -563,11 +607,10 @@ pnpm --filter @turnkeyai/involute exec node dist/index.js import team --token "$
 
 ## 当前重点
 
-- 完成公网 VPS 部署，验证 Google OAuth 回调与会话流程
-- 跑一次真实的 Postgres 备份与恢复演练
-- 部署加固期间保持 Google OAuth、管理员引导、团队 RBAC 稳定
-- 数据库变更走 Prisma migrations，不再用 schema push 走捷径
-- 产品边界收敛期间，保持 compose 栈、CI 与部署自动化可复现
+- 保持生产可信：每日校验备份、异地副本、每次发布做一次恢复演练
+- 人的决定集中在一处（Needs you），每条要人做的规则都有对应页面
+- Agent 自治只通过有审计的策略等级增长，不绕过它
+- 保持界面用词与 UI 组件一致（[docs/design-system.md](docs/design-system.md)）
 
 Railway 仍是后续可能的托管路径，但不是当前的阻塞里程碑。方向见 [docs/current-status.md](docs/current-status.md)、[docs/vision.md](docs/vision.md)、[docs/milestones.md](docs/milestones.md)。
 

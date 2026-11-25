@@ -1,98 +1,79 @@
 # Current Status
 
-Last reviewed on 2026-09-01 for the `npm-v0.2.0` release. Release A–E is included in this source release. Production still runs an earlier deployment; the new migrations and runtime behavior remain unverified there until an immutable image deploy and authenticated smoke complete.
+Last reviewed on 2026-11-24 for the `npm-v0.3.0` release
+([release notes](./releases/npm-v0.3.0.md)).
 
 ## Summary
 
-Involute is past the local prototype stage. The single-team import loop is stable, the issue lifecycle is covered in browser E2E, Google OAuth plus session auth is in place, team-level RBAC exists in both API and web UI, and the web client has already moved onto the new shell and keyboard-first interaction model.
+Involute is a headless project-state and work-graph kernel that agents call
+over MCP, with a web app where people plan, decide and review. The board is a
+projection of committed work, not the destination.
 
-The product identity has shifted: Involute is a headless project-state and work-graph kernel that Agents call. The board is an optional projection, not the destination. The operational remaining work on M1 still matters — the VPS must stay trustworthy while the kernel is built.
-
-The Linear-replacement track is M5. It starts from the current Issue/GraphQL kernel and adds typed links, context bundles, candidate/commitment, claim/lease, MCP, runs, and evidence. It does not start from a new WorkItem table or a new UI.
+It runs in production at <https://involute.lumenopen.com> on one VPS
+(`oracle_5`), deployed by immutable `sha-<12>` image from `main`, with a
+pre-deploy backup on every deploy and a daily verified backup with tiered
+retention. The Involute repository itself, and several others, are tracked in
+it day to day by people and agents.
 
 ## What is done
 
-### M0: Single-team migration acceptance
+### Kernel and agent protocol (M5, K0–K6 and after)
 
-Done:
+- work graph with stable identifiers, delivery contracts and typed links;
+  every committed item has exactly one parent (INV-718)
+- propose → commit → claim → run → evidence → In Review → Done, with human
+  gates; status is read from the server, never remembered (INV-1245)
+- 21 grouped MCP tools at `/mcp` (read-only mirror `/mcp/readonly`), the
+  protocol guide from `protocol_get_guide`, machine-readable docs at
+  `/llms.txt`
+- contract amendments, required acceptance and follow-ups, harness-issued
+  branch names, PR traceability alerts and audit, project alias prefixes
+- agent identity: profiles, owners, trust levels, push channels, hand-off
+  chains, decision receipts
+- autonomy policy L0–L3 per team and project
+  ([autonomy-policy.md](./autonomy-policy.md))
+- delivery packages and external executors
+  ([external-executors.md](./external-executors.md)), scheduled rounds
 
-- `involute import team` runs export, import, and verify in one command
-- the import flow writes a summary artifact
-- the board supports create, update, comment, delete comment, and delete issue
-- Playwright covers the core board lifecycle
-- Docker Compose provides a stable local demo path
-- the canonical `SON` team snapshot has been re-exported from the source system, re-imported into the VPS, and verified there
+### People's work
 
-### M2: Auth and team permissions
+- Board, Backlog, Candidates, In Review, Needs you, Activity, Search, Graph,
+  Projects, Milestones, Delivery, Bugs, Incidents, Hygiene, Ops and Settings —
+  see the [user manual](./manual/README.md)
+- bug flow with zero-bug triage, SLA and triage rotation; incident flow with
+  severity, impact timestamps, postmortem and follow-up deadlines
+- undo for common edits, custom fields, private files, saved views shared with
+  the team, work-graph export / import
+- one design system and a controlled on-screen vocabulary, both enforced in CI
+  ([design-system.md](./design-system.md))
 
-Done:
+### Access and operations (M1, M2)
 
-- browser auth supports Google OAuth and session cookies
-- trusted CLI/dev flows still support `AUTH_TOKEN` and signed viewer assertions
-- global roles exist: `ADMIN`, `USER`
-- team visibility exists: `PUBLIC`, `PRIVATE`
-- team membership roles exist: `VIEWER`, `EDITOR`, `OWNER`
-- `/settings/access` redirects to the current team's settings; agent credentials are managed under **Agents**
-- admin bootstrap exists through `ADMIN_EMAIL_ALLOWLIST` and `admin:bootstrap`
+- Google OAuth sessions, invite-only sign-in with approved domains, workspace
+  roles Admin / Member / Guest, team roles Viewer / Editor / Owner, project
+  sharing ([permissions.md](./permissions.md))
+- per-team GitHub connections through a GitHub App
+  ([github-connection.md](./github-connection.md)), webhook intake with
+  watermark reconciliation and dead-letter quarantine
+- `scripts/deploy-prod.sh` (disk check, backup, rollback, prune), daily
+  verified backup timer, restore drill, authenticated smoke
+  ([ops.md](./ops.md))
+- AIO single container, compose stacks, Ansible playbooks and a private
+  Kubernetes deployment (`ops/k8s/involute-private`)
 
-### Deployment tooling foundation
+## Open
 
-Done:
-
-- production compose files exist
-- Caddy-based reverse proxy config exists
-- Ansible bootstrap and deploy playbooks exist
-- GitHub Actions deploy workflow exists
-- Tailscale-only VPS deployment has already been exercised successfully
-- the public-domain VPS exists, but it has not yet been updated to `cf3feb9`
-- one Postgres backup and restore drill has already been completed
-
-### Release A–E hardening (`npm-v0.2.0`)
-
-- immutable SHA-only deploys, pre-deploy backup, fail-closed restore, authenticated MCP smoke, persistent authenticated uploads
-- revocable MCP-only Agent credentials, transactionally scoped idempotency, revision CAS, and team-scoped human ownership
-- claim-bound runs, run-bound evidence, explicit In Review state, human acceptance/rejection, per-target webhook retry state
-- one readiness predicate shared by ready-list and claim, semantic workflow-state checks, blocker semantics, and serialized graph-cycle writes
-- paginated candidate/graph observation, explicit query failure states, human review UI/CLI, and a documented boundary between graph `PROJECT` work and the frozen legacy `Project` entity
-
-## What is not done yet
-
-### M1: Deployable self-hosting
-
-VPS tooling exists, but the current mainline image is not yet verified on production. Operator procedure is in [ops.md](./ops.md):
-
-- deploy / rollback / logs / compose status
-- backup and restore (`scripts/postgres-backup.sh`, `scripts/postgres-restore.sh`)
-- production smoke checklist (`pnpm smoke:prod`)
-
-### Auth/access product polish
-
-Not blocking for engineering correctness, but still needed before broader operator use:
-
-- clearer access-management UX
-- better success/error feedback on access changes
-- stronger regression coverage for public/private visibility and owner/editor/viewer behavior
-- clearer operator-facing guidance for first-admin bootstrap
-
-### M5: Agent-native work-graph kernel
-
-K0–K6 are implemented: product contract, work graph, context/ready, propose/commit/claim/reject, MCP, Skill, runs, evidence, outbound webhooks, and observation UI.
-
-Agent protocol is MCP + work mutations. Comment heartbeats are not a client protocol.
-
-## Current recommended priority
-
-1. Deploy the VPS onto the immutable image SHA produced from `npm-v0.2.0`, then run the authenticated production smoke.
-2. Keep the operator runbook, OAuth/session path, and backup/restore trustworthy (M1).
-3. Do not add Linear-clone Inbox/Cycle/AgentSession products. Existing leftover routes are frozen.
+- **Off-box backups**: daily backups stay on the VPS disk; a second copy
+  off the box is not set up yet.
+- **npm publishing**: the `npm-v0.2.0` publish was refused (E404); the
+  `NPM_TOKEN` repository secret must be renewed for tag releases to reach npm.
+- Frozen compatibility surfaces (Inbox, Cycles, My Issues, the legacy Project
+  entity) are kept working but not extended.
 
 ## Deliberately not next
 
+- Linear-clone Inbox / Cycle / dashboard product work
+- AgentSession live UI or hosted coding sessions
 - multi-team workspace import
-- Linear Inbox / Cycle / dashboard product work
-- AgentSession live UI, Loops, or hosted coding sessions
-- growing Inbox, Cycles, Projects, or My Issues
-- large-scale performance work
 - magic-link email auth
-- broader enterprise auth/SSO work
-- turning Railway into a fully supported path before the VPS path is fully operationalized
+- Railway as a supported hosting path
