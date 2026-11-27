@@ -107,6 +107,9 @@ export interface StartedServer {
 
 export { getServerEnvironment };
 
+/** Longer than any proxy's idle upstream timeout; see startServer (INV-2210). */
+export const HTTP_KEEP_ALIVE_TIMEOUT_MS = 125_000;
+
 export async function startServer(options: StartServerOptions = {}): Promise<StartedServer> {
   const environment = getServerEnvironment();
   const prisma = options.prisma ?? new PrismaClientConstructor();
@@ -409,6 +412,13 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     });
 
   });
+
+  // Keep an idle connection open longer than the reverse proxy in front of us
+  // keeps it (Caddy holds idle upstream connections for about two minutes,
+  // Cloudflare for up to 90 s). With Node's 5 s default the proxy reuses a
+  // connection we have just closed, gets EOF and answers 502 (INV-2210).
+  httpServer.keepAliveTimeout = HTTP_KEEP_ALIVE_TIMEOUT_MS;
+  httpServer.headersTimeout = HTTP_KEEP_ALIVE_TIMEOUT_MS + 1_000;
 
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {

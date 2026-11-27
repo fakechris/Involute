@@ -4,9 +4,10 @@ import {
   InMemoryCache,
 } from '@apollo/client';
 import { ApolloProvider } from '@apollo/client/react';
-import { CombinedGraphQLErrors, ServerError } from '@apollo/client/errors';
+import { CombinedGraphQLErrors, ServerError, ServerParseError } from '@apollo/client/errors';
 import { setContext } from '@apollo/client/link/context';
 import { ErrorLink } from '@apollo/client/link/error';
+import { RetryLink } from '@apollo/client/link/retry';
 import type { PropsWithChildren } from 'react';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { VIEWER_ASSERTION_HEADER } from '@turnkeyai/involute-shared';
@@ -151,6 +152,24 @@ export function changeErrorMessage(error: unknown, fallback: string): string {
   return isForbiddenError(error) ? READ_ONLY_TEAM_MESSAGE : fallback;
 }
 
+/** Gateway answers that mean "try again": the proxy or the connection failed, not the request. */
+const TRANSIENT_STATUS_CODES = new Set([502, 503, 504, 520, 521, 522, 523, 524]);
+
+/**
+ * Whether a failed request is worth sending again (INV-2210): a read that hit a
+ * dropped connection or a gateway error. Writes are never resent (they may have
+ * been applied), and neither are answers the server gave on purpose — GraphQL
+ * errors, sign-in or permission refusals, other HTTP statuses — or a request the
+ * page cancelled.
+ */
+export function isRetryableReadFailure(error: unknown, operationType: string | undefined): boolean {
+  if (operationType !== 'query') return false;
+  if (CombinedGraphQLErrors.is(error)) return false;
+  if (ServerError.is(error) || ServerParseError.is(error)) return TRANSIENT_STATUS_CODES.has(error.statusCode);
+  if (error instanceof Error && error.name === 'AbortError') return false;
+  return error instanceof Error;
+}
+
 export function createApolloClient(onAuthenticationError?: () => void) {
   const httpLink = new HttpLink({
     credentials: 'include',
@@ -175,6 +194,11 @@ export function createApolloClient(onAuthenticationError?: () => void) {
     if (operation.operationType === 'query' && isAuthenticationError(error)) onAuthenticationError?.();
   });
 
+  const retryLink = new RetryLink({
+    delay: { initial: 300, max: 2_000, jitter: true },
+    attempts: { max: 3, retryIf: (error, operation) => isRetryableReadFailure(error, operation.operationType) },
+  });
+
   return new ApolloClient({
     cache: new InMemoryCache({
       typePolicies: {
@@ -188,7 +212,10 @@ export function createApolloClient(onAuthenticationError?: () => void) {
         },
       },
     }),
-    link: errorLink.concat(authLink).concat(httpLink),
+    // A refresh right after the proxy dropped an idle connection, or a blip
+    // between the browser and the edge, must not turn the page into an error:
+    // reads are tried up to three times before the error is shown.
+    link: errorLink.concat(retryLink).concat(authLink).concat(httpLink),
     defaultOptions: {
       // Work changes behind the reader's back (agents propose, claim and
       // report), so opening a page must not show only what was cached on the
