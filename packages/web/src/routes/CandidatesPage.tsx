@@ -22,6 +22,7 @@ export const COMMIT_CANDIDATE_EVENT = 'involute:commit-candidate';
 export const SNOOZE_CANDIDATE_EVENT = 'involute:snooze-candidate';
 import { PlacementPicker } from '../components/PlacementPicker';
 import { placementProjects, type CreatePlacement } from '../work/placement';
+import { WorkReferenceText } from '../components/WorkReference';
 import { DialogFields, missingRequiredFields, type FieldValues } from '../components/DialogFields';
 import { ResolutionSelect, type WorkResolution } from '../components/CloseReasonDialog';
 import {
@@ -189,6 +190,24 @@ const LEGAL_PARENT_KINDS: Record<WorkKind, WorkKind[]> = {
 
 export function needsParent(candidate: Pick<CandidateWork, 'kind' | 'parent'>): boolean {
   return candidate.kind !== 'PROJECT' && !candidate.parent;
+}
+
+/** Blockers a person cannot clear by typing on the card: the card shows them and its Commit stays off (INV-2193). */
+const CARD_CLEARED_BLOCKERS = new Set(['MISSING_ACCEPTANCE', 'BUG_PRIORITY', 'MISSING_PARENT', 'MISSING_FIELDS']);
+
+export function fixedBlockers(candidate: Pick<CandidateWork, 'commitBlockers'>): Array<{ code: string; message: string }> {
+  return (candidate.commitBlockers ?? []).filter((blocker) => !CARD_CLEARED_BLOCKERS.has(blocker.code));
+}
+
+/**
+ * Why a selected candidate cannot go in a batch commit (INV-2193): everything
+ * commit would refuse except a bug's priority, which the batch takes from the
+ * priority chosen on the page. Acceptance is the stored text the batch sends,
+ * so a stored placeholder stops it too. A parent or required field has to be
+ * chosen on the card, so the batch stops before sending anything.
+ */
+export function batchCommitBlockers(candidate: Pick<CandidateWork, 'commitBlockers'>): Array<{ code: string; message: string }> {
+  return (candidate.commitBlockers ?? []).filter((blocker) => blocker.code !== 'BUG_PRIORITY');
 }
 
 /**
@@ -403,6 +422,7 @@ export function CandidateCard({
   const [duplicateOfId, setDuplicateOfId] = useState('');
   const [parentChoice, setParentChoice] = useState('');
   const missingParent = needsParent(candidate);
+  const unfixable = fixedBlockers(candidate);
   // Zero-bug (INV-750): a bug is committed with a priority (its SLA) or declined with a reason.
   const isBug = isBugCandidate(candidate);
   const [priority, setPriority] = useState(candidate.priority ?? 0);
@@ -626,6 +646,16 @@ export function CandidateCard({
             Needs acceptance
           </Badge>
         ) : null}
+        {missingParent && !parentChoice ? (
+          <Badge tone="danger" title="Committing needs a parent; choose where it belongs on this card.">
+            Needs a parent
+          </Badge>
+        ) : null}
+        {missingFields.length > 0 ? (
+          <Badge tone="danger" title={`Committing needs the required fields: ${missingFields.join(', ')}.`}>
+            Needs fields
+          </Badge>
+        ) : null}
         {(() => {
           const badge = targetStateBadge(candidate);
           return badge ? (
@@ -766,10 +796,13 @@ export function CandidateCard({
         </label>
       </fieldset>
       {readOnly ? <p className="page-note page-note--wrap" role="note">{READ_ONLY_TEAM_MESSAGE}</p> : null}
+      {unfixable.map((blocker) => (
+        <InlineError key={blocker.code}>{blocker.message}</InlineError>
+      ))}
       {error ? <InlineError>{error}</InlineError> : null}
       <div className="observation-card__actions">
         {(() => {
-          const blocked = readOnly || pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority || missingFields.length > 0;
+          const blocked = readOnly || pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority || missingFields.length > 0 || unfixable.length > 0;
           commitRef.current = () => {
             if (!blocked) void handleCommit();
             else document.getElementById(`acceptance-${candidate.id}`)?.focus();
@@ -782,8 +815,10 @@ export function CandidateCard({
         <Btn
           variant="accent"
           icon={<IcoCheck size={12} />}
-          disabled={readOnly || pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority || missingFields.length > 0}
-          {...(missingParent && !parentChoice
+          disabled={readOnly || pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority || missingFields.length > 0 || unfixable.length > 0}
+          {...(unfixable.length
+            ? { title: unfixable[0]!.message }
+            : missingParent && !parentChoice
             ? { title: 'Choose a parent first: committed work must belong somewhere.' }
             : needsPriority
               ? { title: 'Choose a priority first: it sets the bug SLA.' }
@@ -1114,6 +1149,20 @@ export function CandidatesPage() {
       return;
     }
     setAcceptanceMissing([]);
+    // A parent, a required field or a state commit refuses (INV-2193): stop
+    // here and say which, instead of committing some and failing the rest.
+    const selectedBlocked = candidates
+      .filter((c) => selectedIds.includes(c.id))
+      .flatMap((c) => batchCommitBlockers(c).map((blocker) => ({ identifier: c.identifier, message: blocker.message })));
+    if (selectedBlocked.length > 0) {
+      const count = new Set(selectedBlocked.map((item) => item.identifier)).size;
+      setBulkError(
+        `Nothing committed: ${count} selected ${count === 1 ? 'item needs' : 'items need'} attention first. ${selectedBlocked
+          .map((item) => `${item.identifier}: ${item.message}`)
+          .join(' · ')} Fix ${count === 1 ? 'it' : 'them'} on the card, or clear ${count === 1 ? 'it' : 'them'} from the selection.`,
+      );
+      return;
+    }
     setIsBulkProcessing(true);
     setBulkAction('commit');
     setBulkError(null);
@@ -1314,7 +1363,7 @@ export function CandidatesPage() {
           <EmptyState title="No candidate work" body="Agents propose here. The board only shows committed issues." />
         ) : (
           <div className="observation-list">
-            {bulkError && selectedIds.length === 0 ? <InlineError>{bulkError}</InlineError> : null}
+            {bulkError && selectedIds.length === 0 ? <InlineError><WorkReferenceText text={bulkError} /></InlineError> : null}
             {filteredActiveCandidates.length > 0 ? (
               <div className="candidates-toolbar">
                 <label className="candidates-toolbar__select-all">
@@ -1433,7 +1482,7 @@ export function CandidatesPage() {
             status={
               bulkError ? (
                 <span className="candidates-bulk-error" role="alert">
-                  {bulkError}
+                  <WorkReferenceText text={bulkError} />
                   {acceptanceMissing.map((c) => (
                     <Btn key={c.id} variant="ghost" onClick={() => focusAcceptance(c)}>
                       Fill acceptance for {c.identifier}

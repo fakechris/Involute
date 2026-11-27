@@ -60,7 +60,7 @@ flowchart TD
 8. **Placement — every item has one parent (工作图规范 v1, INV-718)**:
    - Legal `CONTAINS`: PROJECT → MILESTONE / DECISION / EPIC / ISSUE; MILESTONE → EPIC / ISSUE; EPIC → ISSUE; ISSUE → ISSUE (sub-issue). An ISSUE directly under a PROJECT is shown as **No milestone**.
    - Move existing work with `work_update(parent_id, expected_revision)`; the parent accepts an identifier or UUID and must pass existing access, team, repository, hierarchy and cycle checks. Never remove CONTAINS to detach work.
-   - Pass `parent_id` on `work_propose`. Committing is **refused** without exactly one parent (every kind but PROJECT); a human may place it at commit.
+   - Pass `parent_id` on `work_propose`. Committing is **refused** without exactly one parent (every kind but PROJECT), so an agent proposal with no parent — no `parent_id` and no related item to inherit one from — or under rejected work is **refused at `work_propose`** (INV-2193); so is one missing a required field. A person may still leave placement to the commit. The Candidates page lists each candidate's `commitBlockers` and a batch commit stops before sending when any selected item has one.
    - `DISCOVERED_DURING` / `DERIVED_FROM` proposals without `parent_id` inherit the related item's nearest legal same-repository ancestor; the result says where they landed.
 9. **Relations — record what the text says (INV-720)**:
    - Mentioning `INV-123` (or a project alias prefix) in a description, contract field or comment records `RELATED_TO` automatically.

@@ -20,9 +20,13 @@ import {
   WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
   AGENT_DESCRIPTION_REQUIRED_MESSAGE,
   AGENT_ACCEPTANCE_REQUIRED_MESSAGE,
+  AGENT_PROPOSE_PARENT_REJECTED_MESSAGE,
+  AGENT_PROPOSE_PARENT_REQUIRED_MESSAGE,
   RESEARCH_INITIAL_DONE_ONLY_MESSAGE,
 } from './errors.ts';
 import { claimWork, commitWork, proposeWork, rejectWork } from './claim-service.ts';
+import { commitBlockers } from './commit-blockers.ts';
+import { setFieldDefinition } from './field-definitions.ts';
 import { uncommitWork } from './work-uncommit.ts';
 import { listReadyWork } from './context-service.ts';
 import { updateIssue } from './issue-service.ts';
@@ -660,6 +664,70 @@ describe('claim service', () => {
       );
       const updated = await updateIssue(prisma, backfilled.id, { acceptance: '回补后的验收标准', expectedRevision: backfilled.revision }, agentActor);
       expect(updated.acceptance).toBe('回补后的验收标准');
+    });
+
+    it('refuses an AGENT proposal with nowhere to go, as commit would (INV-2193)', async () => {
+      const agentActor = { actorId: agent.id, actorKind: 'AGENT' as const, surface: 'mcp' };
+      const humanActor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'web' };
+      const desc = ['### 1. 目标与架构定位', '定位', '### 2. 核心功能与交付范围', '范围', '### 3. 验收标准与验证方案', '测试全绿'].join('\n');
+      const parentId = await testParentId(prisma, team.id);
+
+      await expect(
+        proposeWork(prisma, { teamId: team.id, title: 'Agent work, no parent', description: desc, acceptance: '可核对' }, agentActor),
+      ).rejects.toThrow(AGENT_PROPOSE_PARENT_REQUIRED_MESSAGE);
+
+      // Work found while doing placed work inherits its parent, so it passes.
+      const placed = await proposeWork(prisma, { parentId, teamId: team.id, title: 'Placed work', description: desc, acceptance: '可核对' }, agentActor);
+      const inherited = await proposeWork(
+        prisma,
+        { teamId: team.id, title: 'Found along the way', description: desc, acceptance: '可核对', relatedWorkId: placed.id, relatedWorkType: 'DISCOVERED_DURING' },
+        agentActor,
+      );
+      expect(inherited.parentId).toBe(placed.parentId);
+
+      // A rejected parent would be refused at commit too.
+      const doomed = await proposeWork(prisma, { parentId, teamId: team.id, title: 'Declined container', acceptance: 'x' }, humanActor);
+      await rejectWork(prisma, doomed.id, { expectedRevision: doomed.revision, reason: 'not now', resolution: 'WONT_DO' }, humanActor);
+      await expect(
+        proposeWork(prisma, { parentId: doomed.id, teamId: team.id, title: 'Under declined work', description: desc, acceptance: '可核对' }, agentActor),
+      ).rejects.toThrow(AGENT_PROPOSE_PARENT_REJECTED_MESSAGE);
+
+      // People may still leave placement to the commit.
+      await expect(
+        proposeWork(prisma, { teamId: team.id, title: 'Human work, no parent', acceptance: 'x' }, humanActor),
+      ).resolves.toMatchObject({ commitmentStatus: 'CANDIDATE', parentId: null });
+    });
+
+    it('refuses an AGENT proposal missing a required field, which commit would refuse (INV-2193)', async () => {
+      const agentActor = { actorId: agent.id, actorKind: 'AGENT' as const, surface: 'mcp' };
+      const desc = ['### 1. 目标与架构定位', '定位', '### 2. 核心功能与交付范围', '范围', '### 3. 验收标准与验证方案', '测试全绿'].join('\n');
+      await setFieldDefinition(prisma, { scope: 'TEAM', scopeId: team.id, key: 'risk', label: 'Risk', type: 'ENUM', options: [{ value: 'low', label: 'Low' }], appliesTo: { kinds: ['ISSUE'] }, required: true, reason: 'r' }, human.id);
+      const parentId = await testParentId(prisma, team.id);
+
+      await expect(
+        proposeWork(prisma, { parentId, teamId: team.id, title: 'No risk given', description: desc, acceptance: '可核对' }, agentActor),
+      ).rejects.toThrow(/Fill the required field "Risk" \(risk\) before this work is committed\. An agent proposal passes them in attributes/);
+      await expect(
+        proposeWork(prisma, { parentId, teamId: team.id, title: 'Risk given', description: desc, acceptance: '可核对', attributes: { risk: 'low' } }, agentActor),
+      ).resolves.toMatchObject({ commitmentStatus: 'CANDIDATE' });
+    });
+
+    it('lists the reasons a candidate commit would be refused, in commit\'s own words (INV-2193)', async () => {
+      const humanActor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'web' };
+      const loose = await proposeWork(prisma, { teamId: team.id, title: 'Loose candidate' }, humanActor);
+      const blockers = await commitBlockers(prisma, loose);
+      expect(blockers.map((blocker) => blocker.code)).toEqual(['MISSING_PARENT', 'MISSING_ACCEPTANCE']);
+      await expect(
+        commitWork(prisma, loose.id, { expectedRevision: loose.revision, assigneeId: human.id }, humanActor),
+      ).rejects.toThrow(blockers.find((blocker) => blocker.code === 'MISSING_ACCEPTANCE')!.message);
+      await expect(
+        commitWork(prisma, loose.id, { expectedRevision: loose.revision, assigneeId: human.id, acceptance: 'done when done' }, humanActor),
+      ).rejects.toThrow(blockers.find((blocker) => blocker.code === 'MISSING_PARENT')!.message);
+
+      const ready = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Ready candidate', acceptance: 'x' }, humanActor);
+      expect(await commitBlockers(prisma, ready)).toEqual([]);
+      const committed = await commitWork(prisma, ready.id, { expectedRevision: ready.revision, assigneeId: human.id }, humanActor);
+      expect(await commitBlockers(prisma, committed)).toEqual([]);
     });
 
     it('enforces description gate when updating candidate work as an agent', async () => {

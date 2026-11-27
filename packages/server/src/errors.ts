@@ -247,6 +247,12 @@ export const AGENT_DESCRIPTION_REQUIRED_MESSAGE =
 // Candidates and block every batch commit until a person fills the box by
 // hand — the same reasoning that made acceptance required for bugs (INV-836),
 // extended to every agent proposal.
+export const AGENT_PROPOSE_PARENT_REQUIRED_MESSAGE =
+  'An agent proposal needs a parent: committing is refused without one, so the candidate would fail when a person commits it (INV-2193). Pass parent_id — the PROJECT (no milestone), a MILESTONE, EPIC or parent ISSUE — or related_work_id with DISCOVERED_DURING / DERIVED_FROM to inherit its parent. Only a PROJECT is proposed without one.';
+export const AGENT_PROPOSE_PARENT_REJECTED_MESSAGE =
+  'The parent of an agent proposal cannot be rejected work: committing would be refused (INV-2193). Choose a committed or candidate parent.';
+export const WORK_COMMIT_SUPERSEDED_MESSAGE = 'Commit the replacement work instead of this superseded item.';
+export const WORK_COMMIT_PENDING_DELIVERY_MESSAGE = 'Review the pending delivery change in Candidates before committing this work.';
 export const AGENT_ACCEPTANCE_REQUIRED_MESSAGE =
   'An agent proposal needs acceptance: what must be true when this work is done. Committing is refused without it and agents cannot add it after commit, so the candidate would block the batch commit until a person fills the box by hand. Pass acceptance with the proposal — section 3 of your description (验收标准与验证方案) is the source to draw from.';
 // Dynamic IQL failures carry this prefix; getExposedError lets them through so
@@ -494,6 +500,10 @@ const exposedErrorCodes = new Map<string, string>([
   [SNOOZE_REQUIRES_CANDIDATE_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_DESCRIPTION_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_ACCEPTANCE_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [AGENT_PROPOSE_PARENT_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [AGENT_PROPOSE_PARENT_REJECTED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_COMMIT_SUPERSEDED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_COMMIT_PENDING_DELIVERY_MESSAGE, 'BAD_USER_INPUT'],
   [PROJECT_ALIAS_FORMAT_MESSAGE, 'BAD_USER_INPUT'],
   [PROJECT_ALIAS_KIND_MESSAGE, 'BAD_USER_INPUT'],
   [PROJECT_ALIAS_TAKEN_MESSAGE, 'BAD_USER_INPUT'],

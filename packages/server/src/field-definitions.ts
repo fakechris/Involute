@@ -213,8 +213,7 @@ export function validateAttributes(
     missingRequired.push(definition.key);
   }
   if (mode === 'committed' && missingRequired.length) {
-    const labels = missingRequired.map((key) => `"${byKey.get(key)?.label ?? key}" (${key})`).join(', ');
-    throw createValidationError(`Fill the required field${missingRequired.length > 1 ? 's' : ''} ${labels} before this work is committed.`);
+    throw createValidationError(requiredFieldsMessage(missingRequired.map((key) => byKey.get(key) ?? { key, label: key })));
   }
   return { attributes: next, changed: [...new Set(changed)], missingRequired, refs, definitions };
 }
@@ -461,11 +460,18 @@ export function fieldDefinitionView(definition: FieldDefinition) {
   };
 }
 
+/** The refusal for empty required fields — commit and the candidate's commitBlockers say the same (INV-2193). */
+export function requiredFieldsMessage(fields: Array<{ key: string; label: string }>): string {
+  const labels = fields.map((field) => `"${field.label}" (${field.key})`).join(', ');
+  return `Fill the required field${fields.length > 1 ? 's' : ''} ${labels} before this work is committed.`;
+}
+
 /** Required fields still empty on an item — the candidate warning agents see (INV-1503). */
 export async function missingRequiredFields(prisma: DatabaseClient, issue: { id: string; teamId: string; kind: WorkKind; parentId: string | null; attributes: Prisma.JsonValue }): Promise<FieldDefinition[]> {
   const definitions = await resolveDefinitionsFor(prisma, { ...issue, typeName: await typeNameOf(prisma, issue.id) });
   const values = readAttributes(issue.attributes);
-  return definitions.filter((definition) => definition.required && isEmpty(values[definition.key]));
+  // A required field with a default is filled at commit, so it is not missing (validateAttributes).
+  return definitions.filter((definition) => definition.required && isEmpty(values[definition.key]) && isEmpty(definition.defaultValue));
 }
 
 /** Every active definition a team's work can see: workspace, the team, and each of its PROJECTs (MCP work_catalog(kind: 'fields')). */

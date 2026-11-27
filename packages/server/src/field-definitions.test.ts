@@ -185,10 +185,14 @@ describe('field definitions in the database', () => {
     await expect(updateIssue(prisma, created.id, { attributes: { reviewer: stranger.id } }, human())).rejects.toThrow(/member of the team/);
   });
 
-  it('propose leaves a required field empty; commit refuses until it is filled; a bug report must carry it', async () => {
+  it('an agent proposal must carry a required field; a person may leave it to the commit, which refuses until it is filled; a bug report must carry it', async () => {
     await define({ key: 'customer', label: 'Customer', type: 'TEXT', options: null, required: true });
     const agentUser = await prisma.user.create({ data: { name: 'bot', email: `bot-${Date.now()}@agents.test`, actorKind: 'AGENT', ownerId: admin.id } });
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Needs a customer', description: DESCRIPTION, acceptance: 'a', parentId: milestoneId }, writeActorFromViewer(agentUser, 'mcp'));
+    // INV-2193: commit would refuse it, so the agent hears it at proposal time.
+    await expect(
+      proposeWork(prisma, { teamId: team.id, title: 'Needs a customer', description: DESCRIPTION, acceptance: 'a', parentId: milestoneId }, writeActorFromViewer(agentUser, 'mcp')),
+    ).rejects.toThrow(/Fill the required field "Customer" \(customer\)[^]*An agent proposal passes them in attributes/);
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Needs a customer', acceptance: 'a', parentId: milestoneId }, human());
     expect(candidate.commitmentStatus).toBe('CANDIDATE');
     expect(candidate.attributes).toEqual({});
     await expect(commitWork(prisma, candidate.id, { expectedRevision: candidate.revision, assigneeId: admin.id }, human())).rejects.toThrow(/Fill the required field "Customer"/);
@@ -278,10 +282,12 @@ describe('field definitions over GraphQL and MCP', () => {
   it('an agent writes values through MCP, reads them in work_get_context and the issue page query, and lists the team fields', async () => {
     await graphql(SET_MUTATION, { input: { ...riskInput, scopeId: team.id } });
     await graphql(SET_MUTATION, { input: { ...riskInput, scopeId: team.id, key: 'customer', label: 'Customer', type: 'TEXT', options: null, required: true } });
-    const proposed = await callTool('work_propose', { team: DEFAULT_TEAM_KEY, title: 'Risky change', description: DESCRIPTION, acceptance: 'a', parent_id: milestoneId, attributes: { risk: 'high' } });
+    // A required field left empty is refused at proposal time (INV-2193).
+    expect((await callTool('work_propose', { team: DEFAULT_TEAM_KEY, title: 'Risky change', description: DESCRIPTION, acceptance: 'a', parent_id: milestoneId, attributes: { risk: 'high' } })).error).toMatch(/Fill the required field "Customer" \(customer\)/);
+    const proposed = await callTool('work_propose', { team: DEFAULT_TEAM_KEY, title: 'Risky change', description: DESCRIPTION, acceptance: 'a', parent_id: milestoneId, attributes: { risk: 'high', customer: 'Initech' } });
     expect(proposed.error).toBeUndefined();
-    expect(proposed.attributes).toEqual({ risk: 'high' });
-    expect(proposed.warning).toMatch(/Required fields still empty: customer \(Customer\)/);
+    expect(proposed.attributes).toEqual({ risk: 'high', customer: 'Initech' });
+    expect(proposed.warning ?? '').not.toMatch(/Required fields still empty/);
     expect((await callTool('work_propose', { team: DEFAULT_TEAM_KEY, title: 'Bad', description: DESCRIPTION, acceptance: 'a', parent_id: milestoneId, attributes: { risk: 'medium' } })).error).toMatch(/not one of its options/);
 
     const updated = await callTool('work_update', { id: proposed.id, expected_revision: proposed.revision, attributes: { customer: 'Acme', risk: null } });

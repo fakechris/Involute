@@ -9,6 +9,13 @@ export const CANDIDATE_WORK_FIELDS = gql`
     description
     commitmentStatus
     hasPendingDeliveryChange
+    commitBlockers {
+      code
+      message
+    }
+    # The card edits required fields before commit (INV-1505); without these it could not clear MISSING_FIELDS (INV-2193).
+    attributes
+    fieldDefinitions { key label description type required searchable defaultValue options { value label archived } }
     kind
     revision
     outcome

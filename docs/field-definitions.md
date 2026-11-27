@@ -93,7 +93,7 @@ and the rule.
 | GraphQL `issueCreate(input.attributes)` | `createIssue` before insert |
 | GraphQL `issueUpdate(input.attributes)` | `updateIssue` inside the row transaction; partial update merges with stored values, `null` clears a key |
 | GraphQL `bugReport(input.attributes)` | `reportBug` before create; required fields for Type Bug appear in the dialog |
-| GraphQL `workPropose(input.attributes)` | `proposeWork` before insert (candidates may leave required fields empty; commit refuses until filled, like acceptance) |
+| GraphQL `workPropose(input.attributes)` | `proposeWork` before insert (a person's candidate may leave required fields empty, filled at commit like acceptance; an agent's proposal missing one is refused, INV-2193) |
 | GraphQL `workCommit(input.attributes)` | `commitWork`: fills and re-validates required fields |
 | MCP `work_propose(attributes)` | same `proposeWork` |
 | MCP `work_update(attributes)` | same `updateIssue`; agents may write attributes on committed work (they are not contract fields) |
