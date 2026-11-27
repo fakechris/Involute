@@ -22,6 +22,7 @@ export const COMMIT_CANDIDATE_EVENT = 'involute:commit-candidate';
 export const SNOOZE_CANDIDATE_EVENT = 'involute:snooze-candidate';
 import { PlacementPicker } from '../components/PlacementPicker';
 import { placementProjects, type CreatePlacement } from '../work/placement';
+import { WorkReferenceText } from '../components/WorkReference';
 import { DialogFields, missingRequiredFields, type FieldValues } from '../components/DialogFields';
 import { ResolutionSelect, type WorkResolution } from '../components/CloseReasonDialog';
 import {
@@ -200,12 +201,13 @@ export function fixedBlockers(candidate: Pick<CandidateWork, 'commitBlockers'>):
 
 /**
  * Why a selected candidate cannot go in a batch commit (INV-2193): everything
- * commit would refuse except acceptance and a bug's priority, which the batch
- * checks against the card's own values first. A parent or required field has
- * to be chosen on the card, so the batch stops before sending anything.
+ * commit would refuse except a bug's priority, which the batch takes from the
+ * priority chosen on the page. Acceptance is the stored text the batch sends,
+ * so a stored placeholder stops it too. A parent or required field has to be
+ * chosen on the card, so the batch stops before sending anything.
  */
 export function batchCommitBlockers(candidate: Pick<CandidateWork, 'commitBlockers'>): Array<{ code: string; message: string }> {
-  return (candidate.commitBlockers ?? []).filter((blocker) => blocker.code !== 'MISSING_ACCEPTANCE' && blocker.code !== 'BUG_PRIORITY');
+  return (candidate.commitBlockers ?? []).filter((blocker) => blocker.code !== 'BUG_PRIORITY');
 }
 
 /**
@@ -1361,7 +1363,7 @@ export function CandidatesPage() {
           <EmptyState title="No candidate work" body="Agents propose here. The board only shows committed issues." />
         ) : (
           <div className="observation-list">
-            {bulkError && selectedIds.length === 0 ? <InlineError>{bulkError}</InlineError> : null}
+            {bulkError && selectedIds.length === 0 ? <InlineError><WorkReferenceText text={bulkError} /></InlineError> : null}
             {filteredActiveCandidates.length > 0 ? (
               <div className="candidates-toolbar">
                 <label className="candidates-toolbar__select-all">
@@ -1480,7 +1482,7 @@ export function CandidatesPage() {
             status={
               bulkError ? (
                 <span className="candidates-bulk-error" role="alert">
-                  {bulkError}
+                  <WorkReferenceText text={bulkError} />
                   {acceptanceMissing.map((c) => (
                     <Btn key={c.id} variant="ghost" onClick={() => focusAcceptance(c)}>
                       Fill acceptance for {c.identifier}

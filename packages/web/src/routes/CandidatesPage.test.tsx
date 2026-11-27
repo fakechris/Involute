@@ -369,6 +369,30 @@ describe('CandidatesPage', () => {
     queryDataHolder.current = null;
   });
 
+  it('stops a batch commit on a stored placeholder acceptance before sending anything (INV-2193)', async () => {
+    const placeholder = {
+      ...candidateItems[0],
+      id: 'cand-placeholder',
+      identifier: 'INV-91',
+      acceptance: 'Accepted and committed for execution: old batch',
+      commitBlockers: [{ code: 'MISSING_ACCEPTANCE', message: 'Committed work requires acceptance criteria.' }],
+    };
+    queryDataHolder.current = {
+      issues: { nodes: [candidateItems[0], placeholder], pageInfo: { endCursor: null, hasNextPage: false } },
+      teams: { nodes: mockTeams },
+    };
+    render(
+      <MemoryRouter>
+        <CandidatesPage />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByLabelText(/Select all visible/));
+    fireEvent.click(screen.getByRole('button', { name: /Batch Commit \(2\)/ }));
+    expect(await screen.findByText(/Committed work requires acceptance criteria/)).toBeInTheDocument();
+    expect(mockRunCommit).not.toHaveBeenCalled();
+    queryDataHolder.current = null;
+  });
+
   it('shows a blocker the card cannot clear and keeps Commit off (INV-2193)', async () => {
     const superseded = {
       ...candidateItems[0],
