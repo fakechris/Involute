@@ -26,6 +26,8 @@ Application images must be pinned to an immutable `sha-<12-40 lowercase hex>` ta
 
 TLS terminates at Caddy. The web proxy talks to the API over HTTP on the host-local Compose network, including forwarded MCP bearer tokens. The deployment model therefore trusts the VPS root account and all containers attached to that network; do not co-locate untrusted containers. A multi-tenant host would require a separate encrypted or mutually authenticated upstream design.
 
+The API keeps idle HTTP connections for 125 s (`HTTP_KEEP_ALIVE_TIMEOUT_MS`), longer than Caddy keeps idle upstream connections (2 min); with a shorter server timeout Caddy reuses a connection the API has just closed and answers `502` with `EOF` (INV-2210). The Caddy site for Involute compresses responses (`encode zstd gzip`) except `/mcp`, which streams. Caddy runs with `admin off`, so a Caddyfile change needs `caddy validate` and `systemctl restart caddy`, not `reload`.
+
 ## Status
 
 ```bash

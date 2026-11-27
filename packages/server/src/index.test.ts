@@ -15,7 +15,7 @@ import {
   seedDatabase,
 } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
-import { startServer, type StartedServer } from './index.ts';
+import { HTTP_KEEP_ALIVE_TIMEOUT_MS, startServer, type StartedServer } from './index.ts';
 import { createSession } from './session.js';
 
 loadProjectEnvironment();
@@ -62,6 +62,14 @@ describe('GraphQL server core', () => {
 
   beforeEach(async () => {
     fixture = await resetDatabase(prisma);
+  });
+
+  it('keeps idle connections open longer than the reverse proxy does (INV-2210)', () => {
+    // Caddy keeps idle upstream connections for 2 minutes; a shorter server
+    // timeout makes it reuse a closed connection and answer 502 EOF.
+    expect(HTTP_KEEP_ALIVE_TIMEOUT_MS).toBeGreaterThan(120_000);
+    expect(server.httpServer.keepAliveTimeout).toBe(HTTP_KEEP_ALIVE_TIMEOUT_MS);
+    expect(server.httpServer.headersTimeout).toBeGreaterThan(server.httpServer.keepAliveTimeout);
   });
 
   it('starts, exposes /health, and accepts JSON POSTs on /graphql', async () => {
