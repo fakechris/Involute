@@ -334,6 +334,63 @@ describe('CandidatesPage', () => {
     queryDataHolder.current = null;
   });
 
+  it('stops a batch commit before sending when a selected candidate has no parent, and says which (INV-2193)', async () => {
+    const unplaced = {
+      ...candidateItems[1],
+      id: 'cand-unplaced',
+      identifier: 'INV-2190',
+      title: 'Research with nowhere to go',
+      parent: null,
+      commitBlockers: [
+        {
+          code: 'MISSING_PARENT',
+          message: 'Committed work requires a parent: place it under a PROJECT, MILESTONE, EPIC or parent ISSUE (CONTAINS) before committing, or pass parentId with the commit.',
+        },
+      ],
+    };
+    queryDataHolder.current = {
+      issues: { nodes: [candidateItems[0], unplaced], pageInfo: { endCursor: null, hasNextPage: false } },
+      teams: { nodes: mockTeams },
+    };
+    render(
+      <MemoryRouter>
+        <CandidatesPage />
+      </MemoryRouter>,
+    );
+    // The card says so before anyone commits.
+    const card = screen.getByRole('article', { name: 'INV-2190 candidate' });
+    expect(within(card).getByText('Needs a parent')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText(/Select all visible/));
+    fireEvent.click(screen.getByRole('button', { name: /Batch Commit \(2\)/ }));
+
+    expect(await screen.findByText(/Nothing committed: 1 selected item needs attention first\. INV-2190: Committed work requires a parent/)).toBeInTheDocument();
+    expect(mockRunCommit).not.toHaveBeenCalled();
+    queryDataHolder.current = null;
+  });
+
+  it('shows a blocker the card cannot clear and keeps Commit off (INV-2193)', async () => {
+    const superseded = {
+      ...candidateItems[0],
+      id: 'cand-superseded',
+      identifier: 'INV-88',
+      commitBlockers: [{ code: 'SUPERSEDED', message: 'Commit the replacement work instead of this superseded item.' }],
+    };
+    queryDataHolder.current = {
+      issues: { nodes: [superseded], pageInfo: { endCursor: null, hasNextPage: false } },
+      teams: { nodes: mockTeams },
+    };
+    render(
+      <MemoryRouter>
+        <CandidatesPage />
+      </MemoryRouter>,
+    );
+    const card = screen.getByRole('article', { name: 'INV-88 candidate' });
+    expect(within(card).getByText('Commit the replacement work instead of this superseded item.')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Commit' })).toBeDisabled();
+    queryDataHolder.current = null;
+  });
+
   it('undoes one batch commit as a single gesture and redoes it', async () => {
     const third = {
       ...candidateItems[0],

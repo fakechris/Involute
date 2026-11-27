@@ -37,6 +37,10 @@ import {
   WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE,
   WORK_COMMIT_REQUIRES_OWNER_MESSAGE,
   WORK_COMMIT_REQUIRES_PARENT_MESSAGE,
+  WORK_COMMIT_SUPERSEDED_MESSAGE,
+  WORK_COMMIT_PENDING_DELIVERY_MESSAGE,
+  AGENT_PROPOSE_PARENT_REQUIRED_MESSAGE,
+  AGENT_PROPOSE_PARENT_REJECTED_MESSAGE,
   WORK_COMMIT_PARENT_REJECTED_MESSAGE,
   WORK_COMMIT_PARENT_CONFLICT_MESSAGE,
   WORK_NOT_CANDIDATE_MESSAGE,
@@ -67,9 +71,10 @@ import {
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
 import { isLegalContains, lockWorkGraph } from './graph-integrity.js';
-import { type AttributesInput, applyAttributes, recordAttributeWrite, typeNameOf } from './field-definitions.js';
+import { type AttributesInput, applyAttributes, missingRequiredFields, recordAttributeWrite, requiredFieldsMessage, typeNameOf } from './field-definitions.js';
 import { createIssueWithAudit, mentionTexts, recordStateChangeAcceptance, type CreateIssueInput } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
+import { lacksAcceptance } from './commit-blockers.js';
 import { findOrCreateLabelIds, isBugWork, isResearchWork, namesIncident, namesResearch } from './labels.js';
 import { hasInitialDoneMarker, INITIAL_DONE_MARKER, notifyClosableResearch } from './research-closure.js';
 import { researchLacksDownstream } from './work-hygiene.js';
@@ -145,7 +150,7 @@ export interface ProposeWorkInput {
   teamId: string;
   title: string;
   verification?: string | null;
-  /** Field values (INV-1503); a candidate may leave required ones empty, committing refuses until filled. */
+  /** Field values (INV-1503); a person's candidate may leave required ones empty (filled at commit), an agent's may not (INV-2193). */
   attributes?: AttributesInput | null;
 }
 
@@ -547,6 +552,15 @@ export async function proposeWork(
         createInput.source = createInput.source.replace(/;?initial_state=BACKLOG;?/, '').trim() || null;
       }
     }
+    // An agent knows where its work belongs; a candidate with no parent can
+    // only fail when a person commits it (INV-719), so say so now (INV-2193).
+    // People may still leave placement to the commit, and bugs and incidents
+    // carry their own refusals above.
+    const proposesAsAgent = actor.actorKind === 'AGENT' && !isBug && !isIncident;
+    if (proposesAsAgent && (createInput.kind ?? 'ISSUE') !== 'PROJECT') {
+      if (!parentWork) throw createValidationError(AGENT_PROPOSE_PARENT_REQUIRED_MESSAGE);
+      if (parentWork.commitmentStatus === 'REJECTED') throw createValidationError(AGENT_PROPOSE_PARENT_REJECTED_MESSAGE);
+    }
     const { auditId: creationAuditId, issue: created } = await createIssueWithAudit(transaction, createInput, actor, { linkMentions: false });
     if (parentWork) {
       await createWorkLink(transaction, {
@@ -555,6 +569,14 @@ export async function proposeWork(
         toId: created.id,
         type: 'CONTAINS',
       });
+    }
+    // Required fields (INV-1503) are part of a complete proposal: commit
+    // refuses without them, so an agent passes them in attributes (INV-2193).
+    if (proposesAsAgent && created.commitmentStatus === 'CANDIDATE') {
+      const missing = await missingRequiredFields(transaction, created);
+      if (missing.length) {
+        throw createValidationError(`${requiredFieldsMessage(missing)} An agent proposal passes them in attributes (INV-2193); work_catalog(kind: 'fields') lists them.`);
+      }
     }
     // The typed relation is recorded even when a parent is also given; before
     // INV-719 a parent silently replaced it.
@@ -666,8 +688,6 @@ async function placeForCommit(
   if (!parent || parent.commitmentStatus === 'REJECTED') throw createValidationError(WORK_COMMIT_PARENT_REJECTED_MESSAGE);
 }
 
-const ACCEPTANCE_PLACEHOLDER = /^\s*Accepted and committed for execution\b/i;
-
 export async function commitWork(
   prisma: DatabaseClient,
   id: string,
@@ -697,8 +717,8 @@ export async function commitWork(
       commitIdempotencyId = reservation.record.id;
     }
 
-    if (existing.supersededById) throw createValidationError('Commit the replacement work instead of this superseded item.');
-    if (await transaction.deliveryChangeSet.count({ where: { workId: id, status: 'PENDING' } })) throw createValidationError('Review the pending delivery change in Candidates before committing this work.');
+    if (existing.supersededById) throw createValidationError(WORK_COMMIT_SUPERSEDED_MESSAGE);
+    if (await transaction.deliveryChangeSet.count({ where: { workId: id, status: 'PENDING' } })) throw createValidationError(WORK_COMMIT_PENDING_DELIVERY_MESSAGE);
     if (existing.commitmentStatus !== 'CANDIDATE') {
       throw createValidationError(WORK_NOT_CANDIDATE_MESSAGE);
     }
@@ -712,7 +732,7 @@ export async function commitWork(
     const acceptance = nonEmpty(input.acceptance) ?? nonEmpty(existing.acceptance);
     // The batch page once filled a blank acceptance with this sentence (INV-998);
     // it says nothing an agent could be held to, so it is no acceptance.
-    if (!acceptance || ACCEPTANCE_PLACEHOLDER.test(acceptance)) {
+    if (lacksAcceptance(acceptance)) {
       throw createValidationError(WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE);
     }
 

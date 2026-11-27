@@ -9,6 +9,10 @@ export const CANDIDATE_WORK_FIELDS = gql`
     description
     commitmentStatus
     hasPendingDeliveryChange
+    commitBlockers {
+      code
+      message
+    }
     kind
     revision
     outcome

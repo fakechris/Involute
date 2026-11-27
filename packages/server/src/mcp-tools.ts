@@ -1449,7 +1449,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       type: 'object',
       properties: {
         team: { type: 'string', description: 'Team key or UUID' },
-        attributes: { type: 'object', description: 'Field values { key: value } for the field definitions that apply to this Kind × Type (INV-1503; list them with work_catalog(kind: "fields", team_id)). A candidate may leave required ones empty — the result warns — but commit refuses until they are set; a bug or incident committed on filing must carry them.' },
+        attributes: { type: 'object', description: 'Field values { key: value } for the field definitions that apply to this Kind × Type (INV-1503; list them with work_catalog(kind: "fields", team_id)). Required ones must be set: commit refuses without them, so an agent proposal missing one is refused (INV-2193); a bug or incident committed on filing must carry them too.' },
         title: {
           type: 'string',
           description: 'Clear deliverable title. Do NOT prefix with [已交付], [待办], or status tags — status is tracked via the Involute state machine.',
@@ -1469,7 +1469,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         kind: { type: 'string', enum: ['ISSUE', 'PROJECT', 'MILESTONE', 'DECISION', 'EPIC'] },
         parent_id: {
           type: 'string',
-          description: 'Identifier (e.g. INV-2) or UUID of the parent that CONTAINS this item: PROJECT (for MILESTONE/DECISION/EPIC, or an ISSUE with no milestone), MILESTONE (EPIC/ISSUE), EPIC (ISSUE) or ISSUE (sub-issue). Committing requires a parent; if omitted with related_work_type DISCOVERED_DURING/DERIVED_FROM, the related item\'s nearest legal ancestor is used.',
+          description: 'Identifier (e.g. INV-2) or UUID of the parent that CONTAINS this item: PROJECT (for MILESTONE/DECISION/EPIC, or an ISSUE with no milestone), MILESTONE (EPIC/ISSUE), EPIC (ISSUE) or ISSUE (sub-issue). Required for every kind but PROJECT: commit refuses work without a parent, so a proposal with no parent_id and nothing to inherit it from is refused (INV-2193); if omitted with related_work_type DISCOVERED_DURING/DERIVED_FROM, the related item\'s nearest legal ancestor is used.',
         },
         related_work_id: { type: 'string', description: 'Existing work item identifier (e.g. INV-2) or UUID to relate this new item to.' },
         related_work_type: {

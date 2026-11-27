@@ -1,3 +1,4 @@
+import { commitBlockers } from './commit-blockers.js';
 import { deliveryLinksMissingWarning } from './delivery-links.js';
 import { readCoverageHints } from './semantic-coverage.js';
 import { triageService, triageSuggestionStats, type TriageFeedbackInput } from './semantic-triage.js';
@@ -1455,6 +1456,12 @@ const typeDefs = /* GraphQL */ `
     openBlockers: [Issue!]!
     supersededBy: Issue
     hasPendingDeliveryChange: Boolean!
+    """
+    Why committing this candidate as it stands would be refused, with the
+    message commit refuses with (INV-2193). Empty for committed or rejected
+    work. The owner, chosen at commit, is not checked here.
+    """
+    commitBlockers: [CommitBlocker!]!
     deliveryRootId: String
     deliveryUnitKey: String
     deliveryGrantRevision: Int
@@ -3129,6 +3136,13 @@ const typeDefs = /* GraphQL */ `
     types: [String!]!
   }
 
+  "One reason a candidate's commit would be refused (INV-2193)."
+  type CommitBlocker {
+    "SUPERSEDED, PENDING_DELIVERY_CHANGE, MISSING_PARENT, PARENT_REJECTED, MISSING_ACCEPTANCE, BUG_PRIORITY, MISSING_FIELDS or NO_READY_STATE."
+    code: String!
+    message: String!
+  }
+
   "A work-item field that is configuration, not a column (INV-1503, docs/field-definitions.md)."
   type FieldDefinition {
     id: ID!
@@ -3592,7 +3606,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   input WorkProposeInput {
-    "Field values { key: value } (INV-1503); a candidate may leave required ones empty, commit refuses until they are set."
+    "Field values { key: value } (INV-1503). A person's candidate may leave required ones empty, to be filled at commit; an agent's proposal must carry them (INV-2193)."
     attributes: Json
     teamId: String!
     title: String!
@@ -6933,6 +6947,7 @@ const resolvers = {
   Issue: {
     viewerCanWrite: (parent: IssueParent, _args: unknown, context: GraphQLContext): Promise<boolean> =>
       assertCanWriteIssue(context.prisma, context, parent.id).then(() => true, () => false),
+    commitBlockers: (parent: IssueParent, _args: unknown, context: GraphQLContext) => commitBlockers(context.prisma, parent),
     hasPendingDeliveryChange: async (parent: IssueParent, _args: unknown, context: GraphQLContext) => (await context.prisma.deliveryChangeSet.count({ where: { workId: parent.id, status: 'PENDING' } })) > 0,
     supersededBy: async (parent: IssueParent, _args: unknown, context: GraphQLContext) => parent.supersededById ? context.prisma.issue.findFirst({ where: { AND: [{ id: parent.supersededById }, buildReadableIssueWhere(context) ?? {}] } }) : null,
     priority: (parent: IssueParent): number => parent.priority,

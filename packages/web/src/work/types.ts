@@ -32,6 +32,8 @@ export interface CandidateWork {
   fieldDefinitions?: FieldDefinitionSummary[];
   deliveryRootId?: string | null;
   hasPendingDeliveryChange?: boolean;
+  /** Why committing it as it stands would be refused, in commit's own words (INV-2193). */
+  commitBlockers?: Array<{ code: string; message: string }>;
   id: string;
   identifier: string;
   title: string;
