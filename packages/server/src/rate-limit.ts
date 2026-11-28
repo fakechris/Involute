@@ -97,3 +97,28 @@ export function requestIdentityKey(request: IncomingMessage): string {
 
   return `ip:${request.socket.remoteAddress ?? 'unknown'}`;
 }
+
+/**
+ * A short, non-secret label for a rate-limit identity in logs: its kind and the
+ * first 8 hex of its hash (INV-2312), enough to tell one session's burst from
+ * another's without writing a credential or the full key.
+ */
+export function identityLogLabel(key: string): string {
+  const [kind, rest = ''] = key.split(':', 2);
+  return kind === 'ip' ? 'ip' : `${kind}:${rest.slice(0, 8)}`;
+}
+
+/** Logs at most one line per identity per minute when its bucket runs dry. */
+export class RateLimitLogger {
+  private readonly lastLogged = new Map<string, number>();
+
+  constructor(private readonly log: (line: string) => void = (line) => console.warn(line)) {}
+
+  exceeded(key: string, path: string, retryAfterSeconds: number, now = Date.now()): void {
+    const last = this.lastLogged.get(key);
+    if (last !== undefined && now - last < 60_000) return;
+    if (this.lastLogged.size >= 1_000) this.lastLogged.clear();
+    this.lastLogged.set(key, now);
+    this.log(`[rate-limit] ${identityLogLabel(key)} ran out of requests on ${path}; retry after ${retryAfterSeconds}s`);
+  }
+}
