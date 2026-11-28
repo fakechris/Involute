@@ -342,7 +342,10 @@ export function BoardPage() {
     if (data && !error) lastBoardResult.current = { key: boardQueryKey, data };
   }, [boardQueryKey, data, error]);
   const authenticationError = isAuthenticationError(error);
-  const retainedBoardData = authenticationError && lastBoardResult.current?.key === boardQueryKey
+  // A failed refresh of a board already on screen keeps the cards: an ended
+  // session (INV-2136) or any other failure — a rate-limited burst (INV-2312),
+  // a dropped connection — says so in a notice instead of replacing the board.
+  const retainedBoardData = error && lastBoardResult.current?.key === boardQueryKey
     ? lastBoardResult.current.data
     : undefined;
   const queryData = retainedBoardData ?? data ?? previousData;
@@ -3282,6 +3285,12 @@ export function BoardPage() {
 
   const notices = (
     <>
+      {error && retainedBoardData && !authenticationError && !iqlError ? (
+        <InlineError>
+          The board could not refresh, so it shows what was loaded before.{' '}
+          <Btn variant="subtle" onClick={() => void refetch().catch(() => undefined)}>Retry</Btn>
+        </InlineError>
+      ) : null}
       {mutationError ? (
         // Floats in view: a refused drag may happen far down the board (INV-1534).
         <RefusalNotice

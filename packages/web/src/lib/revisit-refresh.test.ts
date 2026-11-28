@@ -6,13 +6,25 @@ describe('createRevisitRefresher (INV-738)', () => {
   it('refetches when navigating to the page already shown (g c on Candidates), not on first load or a real route change', () => {
     const refetch = vi.fn();
     const refresher = createRevisitRefresher(refetch);
-    refresher.onNavigate({ key: 'a', pathname: '/candidates' });
+    refresher.onNavigate({ key: 'a', pathname: '/candidates', search: '' });
     expect(refetch).not.toHaveBeenCalled();
-    refresher.onNavigate({ key: 'a', pathname: '/candidates' }); // re-render, same entry
+    refresher.onNavigate({ key: 'a', pathname: '/candidates', search: '' }); // re-render, same entry
     expect(refetch).not.toHaveBeenCalled();
-    refresher.onNavigate({ key: 'b', pathname: '/candidates' }); // navigated to the same page
+    refresher.onNavigate({ key: 'b', pathname: '/candidates', search: '' }); // navigated to the same page
     expect(refetch).toHaveBeenCalledTimes(1);
-    refresher.onNavigate({ key: 'c', pathname: '/' }); // a real move: the new page fetches itself
+    refresher.onNavigate({ key: 'c', pathname: '/', search: '' }); // a real move: the new page fetches itself
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refetch when the page only rewrites its own query string (drawer, project, filter) (INV-2312)', () => {
+    const refetch = vi.fn();
+    const refresher = createRevisitRefresher(refetch);
+    refresher.onNavigate({ key: 'a', pathname: '/', search: '?project=fakechris%2FInvolute' });
+    refresher.onNavigate({ key: 'b', pathname: '/', search: '?project=fakechris%2FInvolute&issue=INV-1' }); // open a drawer
+    refresher.onNavigate({ key: 'c', pathname: '/', search: '?project=fakechris%2FInvolute' }); // close it
+    refresher.onNavigate({ key: 'd', pathname: '/', search: '?project=fakechris%2FInvolute&query=bug' }); // type a filter
+    expect(refetch).not.toHaveBeenCalled();
+    refresher.onNavigate({ key: 'e', pathname: '/', search: '?project=fakechris%2FInvolute&query=bug' }); // same page again
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 

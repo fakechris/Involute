@@ -1,7 +1,8 @@
 import { gql } from '@apollo/client';
+import { ServerError } from '@apollo/client/errors';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createApolloClient, isRetryableReadFailure } from './apollo';
+import { createApolloClient, isRetryableReadFailure, retryDelayMs } from './apollo';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -50,6 +51,22 @@ describe('createApolloClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('sends a read again after the session was rate limited (429) (INV-2312)', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Rate limit exceeded. Retry later.' }), {
+        status: 429,
+        headers: { 'content-type': 'application/json', 'retry-after': '1' },
+      }))
+      .mockResolvedValueOnce(jsonResponse({ data: { __typename: 'Query' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createApolloClient();
+    const result = await client.query({ query: gql`query Probe { __typename }`, fetchPolicy: 'network-only' });
+
+    expect(result.data).toEqual({ __typename: 'Query' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('never sends a write twice, even after a 502 (INV-2210)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(gatewayError(502));
     vi.stubGlobal('fetch', fetchMock);
@@ -85,5 +102,28 @@ describe('isRetryableReadFailure', () => {
     const abort = new Error('aborted');
     abort.name = 'AbortError';
     expect(isRetryableReadFailure(abort, 'query')).toBe(false);
+  });
+});
+
+describe('retryDelayMs', () => {
+  function rateLimited(retryAfter: string | null) {
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (retryAfter !== null) headers['retry-after'] = retryAfter;
+    return new ServerError('Response not successful: Received status code 429', {
+      response: new Response('{}', { status: 429, headers }),
+      bodyText: '{}',
+    });
+  }
+
+  it('waits what a 429 asks for, at most five seconds (INV-2312)', () => {
+    expect(retryDelayMs(0, rateLimited('2'))).toBe(2_000);
+    expect(retryDelayMs(0, rateLimited('30'))).toBe(5_000);
+    expect(retryDelayMs(0, rateLimited(null))).toBe(1_000);
+  });
+
+  it('backs off briefly for a dropped connection', () => {
+    const delay = retryDelayMs(1, new TypeError('Failed to fetch'));
+    expect(delay).toBeGreaterThanOrEqual(0);
+    expect(delay).toBeLessThanOrEqual(2_000);
   });
 });

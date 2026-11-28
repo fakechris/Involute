@@ -152,8 +152,26 @@ export function changeErrorMessage(error: unknown, fallback: string): string {
   return isForbiddenError(error) ? READ_ONLY_TEAM_MESSAGE : fallback;
 }
 
-/** Gateway answers that mean "try again": the proxy or the connection failed, not the request. */
-const TRANSIENT_STATUS_CODES = new Set([502, 503, 504, 520, 521, 522, 523, 524]);
+/**
+ * Answers that mean "try again": the proxy or the connection failed, not the
+ * request, or this session sent too much at once (429, INV-2312).
+ */
+const TRANSIENT_STATUS_CODES = new Set([429, 502, 503, 504, 520, 521, 522, 523, 524]);
+
+/** Longest wait before resending a read; a longer Retry-After shows the error instead of a frozen page. */
+const MAX_RETRY_DELAY_MS = 5_000;
+
+/**
+ * How long to wait before resending a read: what a 429 asks for (Retry-After,
+ * capped), otherwise a short randomised backoff.
+ */
+export function retryDelayMs(attempt: number, error: unknown): number {
+  if (ServerError.is(error) && error.statusCode === 429) {
+    const seconds = Number(error.response.headers.get('retry-after'));
+    return Number.isFinite(seconds) && seconds > 0 ? Math.min(MAX_RETRY_DELAY_MS, seconds * 1_000) : 1_000;
+  }
+  return Math.random() * Math.min(2_000, 300 * 2 ** attempt);
+}
 
 /**
  * Whether a failed request is worth sending again (INV-2210): a read that hit a
@@ -195,7 +213,7 @@ export function createApolloClient(onAuthenticationError?: () => void) {
   });
 
   const retryLink = new RetryLink({
-    delay: { initial: 300, max: 2_000, jitter: true },
+    delay: (attempt, _operation, error) => retryDelayMs(attempt, error),
     attempts: { max: 3, retryIf: (error, operation) => isRetryableReadFailure(error, operation.operationType) },
   });
 

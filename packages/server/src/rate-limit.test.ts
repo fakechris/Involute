@@ -1,13 +1,15 @@
 import type { PrismaClient } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { getServerEnvironment } from './environment.ts';
 import {
   getRateLimitOptions,
+  identityLogLabel,
+  RateLimitLogger,
   requestIdentityKey,
   TokenBucketRateLimiter,
 } from './rate-limit.ts';
@@ -71,6 +73,40 @@ describe('rate limiting', () => {
       }
     }
     expect(statuses).toEqual([200, 200, 200, 429, 429]);
+  });
+
+  it('logs once per identity per minute when its bucket runs dry, without the credential (INV-2312)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    server = await startServer({
+      allowAdminFallback: true,
+      authToken: 'rl-token',
+      port: 0,
+      prisma,
+      rateLimit: { enabled: true, burst: 1, refillPerMinute: 0 },
+    });
+    for (let index = 0; index < 3; index += 1) {
+      await fetch(`${server.url}/graphql`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer rl-token', 'content-type': 'application/json' },
+        body: JSON.stringify({ query: '{ __typename }' }),
+      });
+    }
+    const lines = warn.mock.calls.map(([line]) => String(line)).filter((line) => line.startsWith('[rate-limit]'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^\[rate-limit\] tok:[0-9a-f]{8} ran out of requests on \/graphql; retry after \d+s$/);
+    expect(lines[0]).not.toContain('rl-token');
+    warn.mockRestore();
+  });
+
+  it('labels identities without their secret and logs again after a minute', () => {
+    expect(identityLogLabel('sess:0123456789abcdef0123456789abcdef')).toBe('sess:01234567');
+    expect(identityLogLabel('ip:10.0.0.1')).toBe('ip');
+    const lines: string[] = [];
+    const logger = new RateLimitLogger((line) => lines.push(line));
+    logger.exceeded('sess:aaaaaaaabbbb', '/graphql', 1, 0);
+    logger.exceeded('sess:aaaaaaaabbbb', '/graphql', 1, 59_999);
+    logger.exceeded('sess:aaaaaaaabbbb', '/graphql', 1, 60_000);
+    expect(lines).toHaveLength(2);
   });
 
   it('keys buckets per identity and leaves other identities unaffected', async () => {

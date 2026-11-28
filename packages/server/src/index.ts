@@ -40,6 +40,7 @@ import { handleMcpRequest } from './mcp.js';
 import {
   getRateLimitOptions,
   requestIdentityKey,
+  RateLimitLogger,
   TokenBucketRateLimiter,
   type RateLimitOptions,
 } from './rate-limit.js';
@@ -195,6 +196,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   const rateLimiter = rateLimitOptions?.enabled
     ? new TokenBucketRateLimiter(rateLimitOptions)
     : null;
+  const rateLimitLogger = new RateLimitLogger();
 
   // Set once the GitHub workers can start (below); the App callback calls it (INV-1677).
   let onGitHubConfigured: () => void = () => undefined;
@@ -238,8 +240,10 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         limitedPath.startsWith('/mcp') ||
         limitedPath.startsWith('/auth/')
       ) {
-        const decision = rateLimiter.take(requestIdentityKey(request));
+        const identityKey = requestIdentityKey(request);
+        const decision = rateLimiter.take(identityKey);
         if (!decision.allowed) {
+          rateLimitLogger.exceeded(identityKey, limitedPath, decision.retryAfterSeconds);
           response.statusCode = 429;
           response.setHeader('content-type', 'application/json; charset=utf-8');
           response.setHeader('retry-after', String(decision.retryAfterSeconds));
